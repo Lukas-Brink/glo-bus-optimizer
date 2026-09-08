@@ -164,6 +164,17 @@ Check out [`docs/STRATEGY_GUIDE.md`](docs/STRATEGY_GUIDE.md) for detailed tactic
 
 ---
 
+## 🙏 Acknowledgements & Credits
+
+This project draws architectural and conceptual inspiration from prior open-source work in the Glo-Bus optimization space:
+
+- **[glo-bus-max-eps](https://github.com/sankeer28/glo-bus-max-eps)** by [@sankeer28](https://github.com/sankeer28) — Pioneered early automated in-browser iteration and DOM parameter probing for Glo-Bus EPS maximization. Glo-Bus Optimizer builds upon this foundational concept by expanding into a multi-objective balanced scorecard engine, hard financial guardrails (overdraft loan protection and credit grade defense), a draggable glassmorphic HUD, cross-browser Gecko and Chromium support, standalone 1-click bookmarklets, and an offline Python mathematical simulation suite.
+- **[GloBusOptimizer](https://github.com/MHDante/GloBusOptimizer)** by [@MHDante](https://github.com/MHDante) — Early exploration of simulation and gradient descent applied to Glo-Bus product design.
+
+Special thanks to the original authors for exploring algorithmic optimization in competitive business simulations!
+
+---
+
 ## ⚖️ Disclaimer
 
 This software is an independent open-source educational utility developed for learning economic modeling, mathematical optimization, and algorithmic business simulation. It is not affiliated with, endorsed by, or sponsored by McGraw-Hill Education or the creators of GLO-BUS. Use responsibly in accordance with your academic institution's guidelines.
