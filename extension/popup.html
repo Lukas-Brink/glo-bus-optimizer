@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>GloBus-Pilot</title>
+  <style>
+    body {
+      width: 260px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      margin: 0;
+      padding: 16px;
+    }
+    h3 {
+      margin: 0 0 8px 0;
+      font-size: 15px;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    p {
+      font-size: 12px;
+      color: #94a3b8;
+      line-height: 1.4;
+      margin: 0 0 14px 0;
+    }
+    button {
+      width: 100%;
+      background: linear-gradient(135deg, #2563eb, #4f46e5);
+      border: none;
+      color: white;
+      padding: 9px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: linear-gradient(135deg, #1d4ed8, #4338ca);
+    }
+    .badge {
+      display: inline-block;
+      background: #1e293b;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      color: #38bdf8;
+      margin-top: 10px;
+      text-align: center;
+      width: 100%;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+  <h3>⚡ GloBus-Pilot</h3>
+  <p>Decision optimizer is active. Navigate to any GLO-BUS decision screen to view the floating HUD.</p>
+  <button id="reopen-hud">Open / Focus HUD</button>
+  <div class="badge">Program 21 • Ready</div>
+
+  <script>
+    document.getElementById('reopen-hud').addEventListener('click', async () => {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab && tab.id) {
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: () => {
+            const hud = document.getElementById('globus-pilot-hud');
+            if (hud) {
+              hud.style.display = 'block';
+              hud.classList.remove('minimized');
+            }
+          }
+        });
+      }
+    });
+  </script>
+</body>
+</html>

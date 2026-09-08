@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "GloBus-Pilot: Strategy & Decision Optimizer",
+  "version": "2.0.0",
+  "description": "Real-time multi-objective decision optimizer and simulation HUD for GLO-BUS (Camera & Drone Simulation).",
+  "action": {
+    "default_title": "GloBus-Pilot Optimizer",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.glo-bus.com/*",
+        "*://glo-bus.com/*"
+      ],
+      "js": [
+        "dom-adapter.js",
+        "optimizer.js",
+        "hud.js"
+      ],
+      "css": [
+        "hud.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "*://*.glo-bus.com/*",
+    "*://glo-bus.com/*"
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "globus-pilot@optimizer.local",
+      "strict_min_version": "109.0"
+    }
+  }
+}

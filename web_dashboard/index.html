@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GloBus-Pilot: Interactive Strategy & Pro-Forma Simulator</title>
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --card-bg: #111827;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --accent: #38bdf8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg-dark);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 24px;
+    }
+
+    .container { max-width: 1200px; margin: 0 auto; }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    h1 { font-size: 24px; color: #fff; display: flex; align-items: center; gap: 10px; }
+    .badge {
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      color: white;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+
+    /* Scoreboard Top Bar */
+    .scoreboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .score-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 14px;
+      position: relative;
+      overflow: hidden;
+    }
+    .score-card::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 3px;
+      background: var(--primary);
+    }
+    .score-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; }
+    .score-value { font-size: 24px; font-weight: 700; color: var(--accent); margin-top: 4px; }
+    .score-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    /* Layout Grid */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 860px) {
+      .dashboard-grid { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .panel-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Form controls */
+    .control-row {
+      margin-bottom: 14px;
+    }
+    .control-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+    .control-title { color: #e5e7eb; font-weight: 500; }
+    .control-val { color: var(--accent); font-weight: 600; }
+    input[type="range"] {
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: #374151;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--primary);
+      cursor: pointer;
+    }
+
+    .preset-btn-group {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .btn-preset {
+      background: #1f2937;
+      border: 1px solid #374151;
+      color: var(--text);
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    .btn-preset:hover, .btn-preset.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    /* Tips Box */
+    .tip-box {
+      background: rgba(59, 130, 246, 0.1);
+      border-left: 4px solid var(--primary);
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+      font-size: 13px;
+      margin-top: 20px;
+      color: #bfdbfe;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>⚡ GloBus-Pilot Simulator <span class="badge">Program 21</span></h1>
+      <div style="font-size: 13px; color: var(--text-muted);">
+        Interactive Strategy & Pro-Forma Sandbox
+      </div>
+    </header>
+
+    <!-- Strategy Presets -->
+    <div class="preset-btn-group">
+      <button class="btn-preset active" onclick="loadPreset('champion')">🏆 Grand Champion (Balanced)</button>
+      <button class="btn-preset" onclick="loadPreset('max_eps')">🚀 Wall Street Bull (Max EPS)</button>
+      <button class="btn-preset" onclick="loadPreset('volume')">📦 Low-Cost Volume Leader</button>
+      <button class="btn-preset" onclick="loadPreset('premium')">💎 Premium High-P/Q</button>
+    </div>
+
+    <!-- Projected Scoreboard -->
+    <div class="scoreboard">
+      <div class="score-card">
+        <div class="score-label">Projected EPS</div>
+        <div class="score-value" id="val-eps">$0.00</div>
+        <div class="score-sub">Target: &ge; $5.00</div>
+      </div>
+      <div class="score-card">
+        <div class="score-label">Projected ROE</div>
+        <div class="score-value" id="val-roe">0.0%</div>
+        <div class="score-sub">Target: &ge; 25.0%</div>
+      </div>
+      <div class="score-card">
+        <div class="score-label">Stock Price</div>
+        <div class="score-value" id="val-stock">$0.00</div>
+        <div class="score-sub">P/E Multiple driven</div>
+      </div>
+      <div class="score-card">
+        <div class="score-label">Credit Rating</div>
+        <div class="score-value" id="val-credit">A</div>
+        <div class="score-sub">Interest Coverage</div>
+      </div>
+      <div class="score-card">
+        <div class="score-label">Ending Cash</div>
+        <div class="score-value" id="val-cash">$0k</div>
+        <div class="score-sub" id="cash-status">Buffer: Safe</div>
+      </div>
+      <div class="score-card">
+        <div class="score-label">P/Q Ratings</div>
+        <div class="score-value" id="val-pq">0.0 / 0.0</div>
+        <div class="score-sub">Camera / Drone Stars</div>
+      </div>
+    </div>
+
+    <div class="dashboard-grid">
+      <!-- Left Column: Product & Pricing -->
+      <div>
+        <div class="panel">
+          <div class="panel-title">📸 Action Camera Decisions</div>
+          <div class="control-row">
+            <div class="control-header">
+              <span class="control-title">Retail Price ($)</span>
+              <span class="control-val" id="disp-cam-price">$320</span>
+            </div>
+            <input type="range" id="cam-price" min="150" max="600" step="5" value="320" oninput="recalc()">
+          </div>
+
+          <div class="control-row">
+            <div class="control-header">
+              <span class="control-title">Advertising Budget ($000s)</span>
+              <span class="control-val" id="disp-cam-ad">$3,500k</span>
+            </div>
+            <input type="range" id="cam-ad" min="500" max="10000" step="250" value="3500" oninput="recalc()">
+          </div>
+
+          <div class="control-row">
+            <div class="control-header">
+              <span class="control-title">Cumulative R&D Expenditure</span>
+              <span class="control-val" id="disp-cam-rd">$50,000</span>
+            </div>
+            <input type="range" id="cam-rd" min="0" max="50000" step="5000" value="50000" oninput="recalc()">
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">🛸 UAV Drone Decisions</div>
+          <div class="control-row">
+            <div class="control-header">
+              <span class="control-title">Direct Online Price ($)</span>
+              <span class="control-val" id="disp-drone-price">$1,250</span>
+            </div>
+            <input type="range" id="drone-price" min="600" max="2200" step="25" value="1250" oninput="recalc()">
+          </div>
+
+          <div class="control-row">
+            <div class="control-header">
+              <span class="control-title">Search Engine Advertising ($000s)</span>
+              <span class="control-val" id="disp-drone-ad">$4,000k</span>
+            </div>
+            <input type="range" id="drone-ad" min="500" max="12000" step="250" value="4000" oninput="recalc()">
+          </div>
+
+          <div class="control-row">
+            <div class="control-header">
+              <span class="control-title">Cumulative R&D Expenditure</span>
+              <span class="control-val" id="disp-drone-rd">$50,000</span>
+            </div>
+            <input type="range" id="drone-rd" min="0" max="50000" step="5000" value="50000" oninput="recalc()">
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Workforce, Finance & CSR -->
+      <div>
+        <div class="panel">
+          <div class="panel-title">👥 Workforce & Assembly</div>
+          <div class="control-row">
+            <div class="control-header">
+              <span class="control-title">Base Wage ($/yr)</span>
+              <span class="control-val" id="disp-base-wage">$30,000</span>
+            </div>
+            <input type="range" id="base-wage" min="20000" max="45000" step="500" value="30000" oninput="recalc()">
+          </div>
+
+          <div class="control-row">
+            <div class="control-header">
+              <span class="control-title">Assembly Incentive ($/defect-free unit)</span>
+              <span class="control-val" id="disp-incentive">$4.00</span>
+            </div>
+            <input type="range" id="incentive" min="1.00" max="8.00" step="0.25" value="4.00" oninput="recalc()">
+          </div>
+
+          <div class="control-row">
+            <div class="control-header">
+              <span class="control-title">Overtime Allowed (%)</span>
+              <span class="control-val" id="disp-overtime">15%</span>
+            </div>
+            <input type="range" id="overtime" min="0" max="25" step="5" value="15" oninput="recalc()">
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">💰 Finance & Capital Structure</div>
+          <div class="control-row">
+            <div class="control-header">
+              <span class="control-title">Stock Buyback (% of shares)</span>
+              <span class="control-val" id="disp-buyback">5.0% (Max)</span>
+            </div>
+            <input type="range" id="buyback" min="0" max="5" step="1" value="5" oninput="recalc()">
+          </div>
+
+          <div class="control-row">
+            <div class="control-header">
+              <span class="control-title">Dividend Per Share ($)</span>
+              <span class="control-val" id="disp-dividend">$0.80</span>
+            </div>
+            <input type="range" id="dividend" min="0.00" max="3.00" step="0.10" value="0.80" oninput="recalc()">
+          </div>
+
+          <div class="control-row">
+            <div class="control-header">
+              <span class="control-title">Early Debt Paydown ($000s)</span>
+              <span class="control-val" id="disp-debt">$5,000k</span>
+            </div>
+            <input type="range" id="debt-paydown" min="0" max="15000" step="1000" value="5000" oninput="recalc()">
+          </div>
+        </div>
+
+        <div class="tip-box">
+          <strong>💡 Pro Tip for Glo-Bus:</strong> Always buy back the full 5% of shares allowed by the simulation each round. Decreasing your share denominator directly amplifies both EPS and ROE simultaneously!
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function recalc() {
+      // Read inputs
+      const camPrice = parseFloat(document.getElementById('cam-price').value);
+      const camAd = parseFloat(document.getElementById('cam-ad').value);
+      const camRd = parseFloat(document.getElementById('cam-rd').value);
+
+      const dronePrice = parseFloat(document.getElementById('drone-price').value);
+      const droneAd = parseFloat(document.getElementById('drone-ad').value);
+      const droneRd = parseFloat(document.getElementById('drone-rd').value);
+
+      const baseWage = parseFloat(document.getElementById('base-wage').value);
+      const incentive = parseFloat(document.getElementById('incentive').value);
+      const overtime = parseFloat(document.getElementById('overtime').value);
+
+      const buyback = parseFloat(document.getElementById('buyback').value);
+      const dividend = parseFloat(document.getElementById('dividend').value);
+      const debtPaydown = parseFloat(document.getElementById('debt-paydown').value);
+
+      // Update Labels
+      document.getElementById('disp-cam-price').textContent = `$${camPrice}`;
+      document.getElementById('disp-cam-ad').textContent = `$${camAd.toLocaleString()}k`;
+      document.getElementById('disp-cam-rd').textContent = `$${camRd.toLocaleString()}`;
+
+      document.getElementById('disp-drone-price').textContent = `$${dronePrice}`;
+      document.getElementById('disp-drone-ad').textContent = `$${droneAd.toLocaleString()}k`;
+      document.getElementById('disp-drone-rd').textContent = `$${droneRd.toLocaleString()}`;
+
+      document.getElementById('disp-base-wage').textContent = `$${baseWage.toLocaleString()}`;
+      document.getElementById('disp-incentive').textContent = `$${incentive.toFixed(2)}`;
+      document.getElementById('disp-overtime').textContent = `${overtime}%`;
+
+      document.getElementById('disp-buyback').textContent = `${buyback}%`;
+      document.getElementById('disp-dividend').textContent = `$${dividend.toFixed(2)}`;
+      document.getElementById('disp-debt').textContent = `$${debtPaydown.toLocaleString()}k`;
+
+      // Simplified pro-forma math
+      const camPQ = Math.min(9.5, 4.0 + (camRd / 50000 * 2.5) + (camPrice > 350 ? 0.8 : 0));
+      const dronePQ = Math.min(9.5, 4.5 + (droneRd / 50000 * 2.5) + (dronePrice > 1300 ? 0.8 : 0));
+
+      const camUnits = (1800 * (330 / camPrice) ** 1.3 * (1 + Math.log10(camAd / 1000) * 0.25));
+      const droneUnits = (600 * (1250 / dronePrice) ** 1.4 * (1 + Math.log10(droneAd / 1000) * 0.28));
+
+      const netRev = (camUnits * camPrice * 0.9) + (droneUnits * dronePrice);
+      const cogs = (camUnits * (110 + camPQ * 10 - camRd / 10000 * 2)) + (droneUnits * (380 + dronePQ * 40 - droneRd / 10000 * 5));
+      const mktg = (camAd * 4) + (droneAd * 4);
+      const ebit = netRev - cogs - mktg - 12000;
+      const netProfit = Math.max(0, ebit * 0.7 - 2500);
+
+      const shares = 10000 * (1 - buyback / 100);
+      const eps = netProfit / shares;
+      const stockPrice = eps * 18.5;
+      const roe = (netProfit / (140000 + netProfit - (shares * dividend))) * 100;
+      const endingCash = 14000 + (netProfit * 1.05) - debtPaydown - (shares * dividend) - (10000 * (buyback / 100) * stockPrice * 0.05);
+
+      // Render Metrics
+      document.getElementById('val-eps').textContent = `$${eps.toFixed(2)}`;
+      document.getElementById('val-roe').textContent = `${roe.toFixed(1)}%`;
+      document.getElementById('val-stock').textContent = `$${stockPrice.toFixed(2)}`;
+      document.getElementById('val-pq').textContent = `${camPQ.toFixed(1)} / ${dronePQ.toFixed(1)}`;
+      document.getElementById('val-cash').textContent = `$${Math.round(endingCash).toLocaleString()}k`;
+
+      const cashStatus = document.getElementById('cash-status');
+      if (endingCash < 2000) {
+        cashStatus.textContent = '⚠️ Risk of overdraft!';
+        cashStatus.style.color = 'var(--danger)';
+      } else {
+        cashStatus.textContent = 'Buffer: Safe';
+        cashStatus.style.color = 'var(--success)';
+      }
+    }
+
+    function loadPreset(name) {
+      document.querySelectorAll('.btn-preset').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+
+      if (name === 'champion') {
+        document.getElementById('cam-price').value = 330;
+        document.getElementById('cam-ad').value = 3500;
+        document.getElementById('cam-rd').value = 50000;
+        document.getElementById('drone-price').value = 1250;
+        document.getElementById('drone-ad').value = 4000;
+        document.getElementById('drone-rd').value = 50000;
+        document.getElementById('base-wage').value = 30000;
+        document.getElementById('incentive').value = 4.00;
+        document.getElementById('buyback').value = 5;
+      } else if (name === 'max_eps') {
+        document.getElementById('cam-price').value = 360;
+        document.getElementById('cam-ad').value = 2800;
+        document.getElementById('cam-rd').value = 50000;
+        document.getElementById('drone-price').value = 1350;
+        document.getElementById('drone-ad').value = 3200;
+        document.getElementById('drone-rd').value = 50000;
+        document.getElementById('base-wage').value = 28000;
+        document.getElementById('incentive').value = 3.50;
+        document.getElementById('buyback').value = 5;
+      } else if (name === 'volume') {
+        document.getElementById('cam-price').value = 270;
+        document.getElementById('cam-ad').value = 5000;
+        document.getElementById('drone-price').value = 1050;
+        document.getElementById('drone-ad').value = 5500;
+        document.getElementById('buyback').value = 5;
+      } else if (name === 'premium') {
+        document.getElementById('cam-price').value = 420;
+        document.getElementById('cam-ad').value = 4500;
+        document.getElementById('drone-price').value = 1600;
+        document.getElementById('drone-ad').value = 5000;
+        document.getElementById('buyback').value = 5;
+      }
+      recalc();
+    }
+
+    // Run once on load
+    recalc();
+  </script>
+</body>
+</html>
