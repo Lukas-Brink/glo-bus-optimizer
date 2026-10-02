@@ -173,20 +173,197 @@ class GloBusDOMAdapter {
     return docs;
   }
 
-  detectPageType() {
-    const loc = window.location ? (window.location.pathname + window.location.search) : '';
-    const title = typeof document !== 'undefined' ? (document.title || '') : '';
-    const combined = `${loc} ${title}`.toLowerCase();
+  matchSectionName(text) {
+    if (!text || typeof text !== 'string') return null;
+    const t = text.toLowerCase().trim();
+    if (!t) return null;
 
-    let detected = 'GENERAL_DECISION';
-    if (combined.includes('product-design') || combined.includes('product_design') || combined.includes('product design')) detected = 'PRODUCT_DESIGN';
-    else if ((combined.includes('uav') || combined.includes('drone')) && combined.includes('marketing')) detected = 'UAV_MARKETING';
-    else if ((combined.includes('acc') || combined.includes('camera') || combined.includes('ac ')) && combined.includes('marketing')) detected = 'AC_MARKETING';
-    else if (combined.includes('special') || combined.includes('contract')) detected = 'SPECIAL_CONTRACTS';
-    else if (combined.includes('compensation') || combined.includes('facility') || combined.includes('facilities') || combined.includes('assembly') || combined.includes('workforce')) detected = 'COMPENSATION_FACILITIES';
-    else if (combined.includes('corporate') || combined.includes('csr') || combined.includes('citizenship')) detected = 'CSR';
-    else if (combined.includes('finance') || combined.includes('cash')) detected = 'FINANCE';
-    else if (combined.includes('marketing')) detected = 'MARKETING';
+    // 1. Product Design
+    if (t.includes('product design') || t.includes('product-design') || t.includes('product_design') ||
+        t.includes('/pds') || t.includes('pds.') || t.includes('pdesign') || t === 'pd' || t === 'panel-pd') {
+      return 'PRODUCT_DESIGN';
+    }
+
+    // 2. UAV Drone Marketing (Must check before generic marketing)
+    if (((t.includes('uav') || t.includes('drone')) && (t.includes('marketing') || t.includes('pricing') || t.includes('region'))) ||
+        t.includes('uav drone marketing') || t.includes('drone marketing') || t.includes('uav marketing') ||
+        t.includes('/uavm') || t.includes('uavm.') || t === 'dm' || t === 'panel-dm') {
+      return 'UAV_MARKETING';
+    }
+
+    // 3. AC Camera Marketing
+    if (((t.includes('camera') || t.includes('acc') || t.includes('ac ')) && (t.includes('marketing') || t.includes('pricing') || t.includes('region'))) ||
+        t.includes('ac camera marketing') || t.includes('camera marketing') || t.includes('ac marketing') ||
+        t.includes('/acm') || t.includes('acm.') || t === 'cm' || t === 'panel-cm') {
+      return 'AC_MARKETING';
+    }
+
+    // 4. Compensation & Facilities / Workforce
+    if (t.includes('compensation') || t.includes('facility') || t.includes('facilities') ||
+        t.includes('assembly') || t.includes('workforce') || t.includes('/wfc') || t.includes('wfc.') || t === 'wf' || t === 'panel-wf') {
+      return 'COMPENSATION_FACILITIES';
+    }
+
+    // 5. Special Contract Offers
+    if (t.includes('special contract') || t.includes('contract offer') || t.includes('special offer') ||
+        t.includes('contract offers') || t.includes('/sco') || t.includes('sco.') || t === 'sco' || t === 'panel-sco') {
+      return 'SPECIAL_CONTRACTS';
+    }
+
+    // 6. Corporate Social Responsibility (CSR)
+    if (t.includes('corporate citizenship') || t.includes('citizenship') || t.includes('corporate social') ||
+        t.includes('csr') || t.includes('/csrc') || t.includes('csrc.') || t === 'csr' || t === 'panel-csr') {
+      return 'CSR';
+    }
+
+    // 7. Finance & Cash Flow
+    if (t.includes('finance') || t.includes('cash flow') || t.includes('cash_flow') ||
+        t.includes('/fin') || t.includes('fin.') || t === 'fin' || t === 'panel-fin') {
+      return 'FINANCE';
+    }
+
+    // Generic marketing fallback
+    if (t.includes('marketing') || t.includes('/mkt')) {
+      return 'AC_MARKETING';
+    }
+
+    return null;
+  }
+
+  detectPageType() {
+    let detected = null;
+    const docs = this.getAllDocuments();
+
+    // Strategy 1: Active navigation links, tabs, or sidebar indicators across all documents
+    for (const doc of docs) {
+      if (detected) break;
+      try {
+        const activeNavSelectors = [
+          '.tab-nav li a.active',
+          '.tab-nav a.active',
+          '#sidebar a.active',
+          '#sidebar li.active a',
+          '#left-menu a.active',
+          '#left-menu li.active a',
+          '#leftmenu a.active',
+          '.sidebar a.active',
+          'nav a.active',
+          '[role="navigation"] a.active',
+          '.left_nav a.active',
+          '.nav a.active',
+          'li.nav-item.active a',
+          'li.active a',
+          'a.selected',
+          'li.selected a',
+          '[role="tab"][aria-selected="true"]',
+          '[aria-current="page"]'
+        ];
+        const activeEls = doc.querySelectorAll(activeNavSelectors.join(', '));
+        for (const el of activeEls) {
+          if (el.closest && el.closest('#globus-pilot-hud')) continue;
+          const text = (el.textContent || el.innerText || '').trim();
+          const target = (el.getAttribute && el.getAttribute('data-target')) || '';
+          const href = (el.getAttribute && el.getAttribute('href')) || '';
+          const titleAttr = (el.getAttribute && el.getAttribute('title')) || '';
+          const onclickAttr = (el.getAttribute && el.getAttribute('onclick')) || '';
+          const match = this.matchSectionName(`${text} ${target} ${href} ${titleAttr} ${onclickAttr}`);
+          if (match) {
+            detected = match;
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Strategy 2: Active or visible content panels and headings
+    if (!detected) {
+      for (const doc of docs) {
+        if (detected) break;
+        try {
+          // Look in active panel containers
+          const activePanels = doc.querySelectorAll('.panel.active, .tab-pane.active, div[role="tabpanel"].active, .tab-content > .active, div[id^="panel-"].active');
+          for (const p of activePanels) {
+            const heading = p.querySelector('h1, h2, h3, .panel-title, .page-title, th.header');
+            const hText = heading ? (heading.textContent || '') : '';
+            const pId = p.id || '';
+            const match = this.matchSectionName(`${hText} ${pId}`);
+            if (match) {
+              detected = match;
+              break;
+            }
+          }
+          if (detected) break;
+
+          // Look in prominent visible page headers / titles
+          const headings = doc.querySelectorAll('h1, h2, .page-title, #pageTitle, #page-header, .page-header, .content-header');
+          for (const h of headings) {
+            if (h.closest && h.closest('#globus-pilot-hud')) continue;
+            if (h.offsetParent !== null || (h.offsetWidth && h.offsetWidth > 0)) {
+              const text = (h.textContent || '').trim();
+              const match = this.matchSectionName(text);
+              if (match) {
+                detected = match;
+                break;
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    // Strategy 3: Child frame locations and titles
+    if (!detected) {
+      for (const doc of docs) {
+        if (typeof document !== 'undefined' && doc === document) continue;
+        try {
+          const loc = doc.location ? (doc.location.pathname + doc.location.search + (doc.location.hash || '')) : '';
+          const title = doc.title || '';
+          const match = this.matchSectionName(`${loc} ${title}`);
+          if (match) {
+            detected = match;
+            break;
+          }
+        } catch (_) {}
+      }
+    }
+
+    // Strategy 4: Distinctive editable form input and select names/IDs in document
+    if (!detected) {
+      for (const doc of docs) {
+        if (detected) break;
+        try {
+          const inputs = doc.querySelectorAll('input:not([type="hidden"]), select');
+          for (const inp of inputs) {
+            if (inp.closest && inp.closest('#globus-pilot-hud')) continue;
+            const nameId = `${inp.name || ''} ${inp.id || ''}`.toLowerCase();
+            if (nameId.includes('cameramodel') || nameId.includes('photoquality') || nameId.includes('camerahousing')) {
+              detected = 'PRODUCT_DESIGN'; break;
+            } else if (nameId.includes('droneprice') || nameId.includes('uavmodel') || nameId.includes('dronefeature')) {
+              detected = 'UAV_MARKETING'; break;
+            } else if (nameId.includes('naprice') || nameId.includes('eaprice') || nameId.includes('apprice') || nameId.includes('laprice') || nameId.includes('cameraprice')) {
+              detected = 'AC_MARKETING'; break;
+            } else if (nameId.includes('basewage') || nameId.includes('workstation') || nameId.includes('fringebenefit') || nameId.includes('attendancebonus')) {
+              detected = 'COMPENSATION_FACILITIES'; break;
+            } else if (nameId.includes('specialcontract') || nameId.includes('bidprice') || nameId.includes('contractoffer')) {
+              detected = 'SPECIAL_CONTRACTS'; break;
+            } else if (nameId.includes('charitabledonation') || nameId.includes('greeninitiative') || nameId.includes('ethictraining')) {
+              detected = 'CSR'; break;
+            } else if (nameId.includes('sharerepurchase') || nameId.includes('repurchase') || nameId.includes('dividend') || nameId.includes('earlyrepayment')) {
+              detected = 'FINANCE'; break;
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    // Strategy 5: Top window location and title
+    if (!detected) {
+      const loc = typeof window !== 'undefined' && window.location ? (window.location.pathname + window.location.search + (window.location.hash || '')) : '';
+      const title = typeof document !== 'undefined' ? (document.title || '') : '';
+      detected = this.matchSectionName(`${loc} ${title}`);
+    }
+
+    detected = detected || 'GENERAL_DECISION';
 
     if (this._lastDetectedPageType && this._lastDetectedPageType !== detected) {
       this.clearDomCaches();
@@ -2598,6 +2775,12 @@ window.gloBusOptimizer = new GloBusOptimizer(window.gloBusDOMAdapter);
     getCurrentSectionKey() {
       const adapter = window.gloBusDOMAdapter;
       const detected = adapter ? adapter.detectPageType() : '';
+      if (detected && detected !== 'GENERAL_DECISION') {
+        const canonical = ['PRODUCT_DESIGN', 'AC_MARKETING', 'UAV_MARKETING', 'COMPENSATION_FACILITIES', 'SPECIAL_CONTRACTS', 'CSR', 'FINANCE'];
+        if (canonical.includes(detected)) return detected;
+        if (detected === 'WORKFORCE_COMPENSATION' || detected === 'WORKFORCE') return 'COMPENSATION_FACILITIES';
+      }
+
       const url = window.location ? (window.location.pathname + window.location.search) : '';
       const title = typeof document !== 'undefined' ? document.title : '';
 
@@ -3076,6 +3259,24 @@ window.gloBusOptimizer = new GloBusOptimizer(window.gloBusDOMAdapter);
     } else {
       existingHud.style.display = '';
       existingHud.classList.remove('minimized');
+      if (window.gloBusDOMAdapter && typeof window.gloBusDOMAdapter.clearDomCaches === 'function') {
+        window.gloBusDOMAdapter.clearDomCaches();
+      }
+      const label = document.getElementById('hud-active-page');
+      if (label && window.gloBusDOMAdapter) {
+        const pt = window.gloBusDOMAdapter.pageType;
+        const names = {
+          PRODUCT_DESIGN: 'Product Design',
+          AC_MARKETING: 'AC Camera Marketing',
+          UAV_MARKETING: 'UAV Drone Marketing',
+          COMPENSATION_FACILITIES: 'Compensation & Facilities',
+          WORKFORCE_COMPENSATION: 'Compensation & Facilities',
+          SPECIAL_CONTRACTS: 'Special Contract Offers',
+          CSR: 'Corporate Citizenship',
+          FINANCE: 'Finance & Cash Flow'
+        };
+        label.textContent = names[pt] || pt.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      }
     }
     return;
   }
@@ -3616,8 +3817,12 @@ window.gloBusOptimizer = new GloBusOptimizer(window.gloBusDOMAdapter);
     show: () => {
       hud.style.display = '';
       hud.classList.remove('minimized');
-      startHeartbeat();
+      if (adapter && typeof adapter.clearDomCaches === 'function') {
+        adapter.clearDomCaches();
+      }
+      updatePageLabel();
       refreshLiveScoreboard();
+      startHeartbeat();
     },
     hide: () => {
       stopHeartbeat();
@@ -3633,6 +3838,22 @@ window.gloBusOptimizer = new GloBusOptimizer(window.gloBusDOMAdapter);
       delete window.gloBusHUD;
     }
   };
+
+  // Proactively refresh live page label and scoreboard when user clicks any navigation or tab elements
+  document.addEventListener('click', (e) => {
+    if (e.target && e.target.closest && e.target.closest('#globus-pilot-hud')) return;
+    setTimeout(refreshLiveScoreboard, 100);
+    setTimeout(refreshLiveScoreboard, 400);
+  });
+
+  window.addEventListener('focus', () => {
+    if (hud.style.display !== 'none') {
+      if (adapter && typeof adapter.clearDomCaches === 'function') {
+        adapter.clearDomCaches();
+      }
+      refreshLiveScoreboard();
+    }
+  });
 
   console.log('GloBus-Pilot minimal HUD ready with Live Diagnostics Console.');
 })();

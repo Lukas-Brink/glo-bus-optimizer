@@ -755,6 +755,63 @@ console.log('Testing startFullRound execution...');
 
   console.log('  [OK] Manifest icons, strict mode safety, and distribution integrity verified.');
 
+  // Test 21: Active Page Detection & HUD Reopen Screen Tag Synchronization
+  console.log('Testing Active Page Detection & Screen Tag Synchronization...');
+  const prevQSA2 = global.document.querySelectorAll;
+
+  // Case 21A: Active sidebar link detection
+  global.document.querySelectorAll = (sel) => {
+    if (sel.includes('.tab-nav') || sel.includes('#sidebar') || sel.includes('active')) {
+      return [{
+        textContent: 'AC Camera Marketing',
+        getAttribute: (attr) => attr === 'data-target' ? 'cm' : null,
+        closest: () => null
+      }];
+    }
+    return [];
+  };
+  assert.strictEqual(global.gloBusDOMAdapter.detectPageType(), 'AC_MARKETING', 'Active tab link must detect AC_MARKETING');
+
+  // Case 21B: Active panel heading detection
+  global.document.querySelectorAll = (sel) => {
+    if (sel.includes('.panel.active')) {
+      return [{
+        id: 'panel-fin',
+        querySelector: (sub) => ({ textContent: 'Finance & Cash Flow Decisions' })
+      }];
+    }
+    return [];
+  };
+  assert.strictEqual(global.gloBusDOMAdapter.detectPageType(), 'FINANCE', 'Active panel heading must detect FINANCE');
+
+  // Case 21C: Distinctive form inputs detection
+  global.document.querySelectorAll = (sel) => {
+    if (sel.includes('input:not')) {
+      return [
+        { name: 'dronePrice', id: 'dronePrice', closest: () => null },
+        { name: 'uavModels', id: 'uavModels', closest: () => null }
+      ];
+    }
+    return [];
+  };
+  assert.strictEqual(global.gloBusDOMAdapter.detectPageType(), 'UAV_MARKETING', 'Distinctive inputs must detect UAV_MARKETING');
+
+  // Case 21D: Child frame detection
+  const origGetAllDocs = global.gloBusDOMAdapter.getAllDocuments;
+  global.gloBusDOMAdapter.getAllDocuments = () => [
+    global.document,
+    { location: { pathname: '/student/sco.cfm', search: '', hash: '' }, title: 'Special Contracts', querySelectorAll: () => [] }
+  ];
+  global.document.querySelectorAll = () => [];
+  assert.strictEqual(global.gloBusDOMAdapter.detectPageType(), 'SPECIAL_CONTRACTS', 'Child frame URL/title must detect SPECIAL_CONTRACTS');
+
+  // Case 21E: Coordinator getCurrentSectionKey reflects detected page
+  assert.strictEqual(global.gloBusPageCoordinator.getCurrentSectionKey(), 'SPECIAL_CONTRACTS', 'Coordinator getCurrentSectionKey must match detected page');
+
+  global.gloBusDOMAdapter.getAllDocuments = origGetAllDocs;
+  global.document.querySelectorAll = prevQSA2;
+  console.log('  [OK] Multi-strategy active page detection and screen tag synchronization verified.');
+
   console.log('\nAll JS extension tests passed successfully!');
 })();
 

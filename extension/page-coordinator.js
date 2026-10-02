@@ -254,6 +254,12 @@
     getCurrentSectionKey() {
       const adapter = window.gloBusDOMAdapter;
       const detected = adapter ? adapter.detectPageType() : '';
+      if (detected && detected !== 'GENERAL_DECISION') {
+        const canonical = ['PRODUCT_DESIGN', 'AC_MARKETING', 'UAV_MARKETING', 'COMPENSATION_FACILITIES', 'SPECIAL_CONTRACTS', 'CSR', 'FINANCE'];
+        if (canonical.includes(detected)) return detected;
+        if (detected === 'WORKFORCE_COMPENSATION' || detected === 'WORKFORCE') return 'COMPENSATION_FACILITIES';
+      }
+
       const url = window.location ? (window.location.pathname + window.location.search) : '';
       const title = typeof document !== 'undefined' ? document.title : '';
 

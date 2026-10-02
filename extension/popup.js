@@ -44,6 +44,24 @@ document.addEventListener('DOMContentLoaded', () => {
           if (hud) {
             hud.style.display = '';
             hud.classList.remove('minimized');
+            if (window.gloBusDOMAdapter && typeof window.gloBusDOMAdapter.clearDomCaches === 'function') {
+              window.gloBusDOMAdapter.clearDomCaches();
+            }
+            const activePageLabel = document.getElementById('hud-active-page');
+            if (activePageLabel && window.gloBusDOMAdapter) {
+              const pt = window.gloBusDOMAdapter.pageType;
+              const names = {
+                PRODUCT_DESIGN: 'Product Design',
+                AC_MARKETING: 'AC Camera Marketing',
+                UAV_MARKETING: 'UAV Drone Marketing',
+                COMPENSATION_FACILITIES: 'Compensation & Facilities',
+                WORKFORCE_COMPENSATION: 'Compensation & Facilities',
+                SPECIAL_CONTRACTS: 'Special Contract Offers',
+                CSR: 'Corporate Citizenship',
+                FINANCE: 'Finance & Cash Flow'
+              };
+              activePageLabel.textContent = names[pt] || pt.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            }
             return 'STYLE_RESTORED';
           }
           return 'NOT_INJECTED';

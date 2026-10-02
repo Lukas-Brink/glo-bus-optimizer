@@ -54,9 +54,11 @@ const releaseNotes = `# Glo-Bus Optimizer v${version} Release Notes
 ## Autonomous Multi-Objective Decision Optimizer & Simulation Suite
 
 ### What's New in v${version}:
-- **1-Click Full Round Optimization**: Single "OPTIMIZE FULL ROUND" button autonomously traverses all 7 decision screens in canonical order (Product Design -> AC Marketing -> UAV Marketing -> Compensation & Facilities -> Special Contract Offers -> CSR -> Finance).
-- **Multi-Cycle Mathematical Convergence**: Automatically runs up to 3 iterative passes until portfolio EPS stabilizes (Delta EPS < $0.02).
-- **Single Master Baseline**: Preserves original Round Baseline throughout all cycles so performance deltas accurately reflect authentic gains over initial team decisions.
+- **Dynamic Active Screen Detection**: Multi-tier detection engine reliably recognizes in-page screen transitions across active sidebar tabs, content panels, child iframes, and distinctive input fields.
+- **Instant HUD Screen Tag Refresh**: Fixed HUD screen tag lagging when closing and reopening the controller or navigating between decision tabs. Added immediate document click and focus listeners for 100ms UI synchronization.
+- **Autonomous Full Round Optimization**: Single "OPTIMIZE FULL ROUND" button autonomously traverses all 7 decision screens in canonical sequence (Product Design -> AC Marketing -> UAV Marketing -> Compensation & Facilities -> Special Contract Offers -> CSR -> Finance).
+- **Multi-Cycle Deep Convergence**: Automatically executes up to 3 iterative passes until portfolio EPS stabilizes (Delta EPS < $0.02).
+- **Single Master Baseline**: Preserves authentic Round Baseline throughout all cycles so performance deltas accurately reflect true gains over initial decisions.
 - **Cash-Defensive Solvency Policy for Special Contracts**: Solves sealed-bid regional auctions while eliminating speculative revenues from pro-forma statements, defending the $2,500k cash buffer against 12%+ emergency overdraft loans.
 - **CSR Image Rating Target**: Intelligently locks image rating to Investor Expectation target (75) to prevent wasteful overspending.
 - **Universal Cross-Browser Distribution**:

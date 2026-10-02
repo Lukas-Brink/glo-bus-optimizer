@@ -52,7 +52,7 @@ ${hud}
 const userScriptHeader = `// ==UserScript==
 // @name         GloBus-Pilot: Strategy & Decision Optimizer
 // @namespace    https://glo-bus.com/
-// @version      2.1.2
+// @version      2.1.3
 // @description  Autonomous multi-objective decision optimizer & simulation HUD for GLO-BUS with Live Diagnostics Console
 // @author       GloBus-Pilot AI
 // @match        *://*.glo-bus.com/*

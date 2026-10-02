@@ -12,6 +12,24 @@
     } else {
       existingHud.style.display = '';
       existingHud.classList.remove('minimized');
+      if (window.gloBusDOMAdapter && typeof window.gloBusDOMAdapter.clearDomCaches === 'function') {
+        window.gloBusDOMAdapter.clearDomCaches();
+      }
+      const label = document.getElementById('hud-active-page');
+      if (label && window.gloBusDOMAdapter) {
+        const pt = window.gloBusDOMAdapter.pageType;
+        const names = {
+          PRODUCT_DESIGN: 'Product Design',
+          AC_MARKETING: 'AC Camera Marketing',
+          UAV_MARKETING: 'UAV Drone Marketing',
+          COMPENSATION_FACILITIES: 'Compensation & Facilities',
+          WORKFORCE_COMPENSATION: 'Compensation & Facilities',
+          SPECIAL_CONTRACTS: 'Special Contract Offers',
+          CSR: 'Corporate Citizenship',
+          FINANCE: 'Finance & Cash Flow'
+        };
+        label.textContent = names[pt] || pt.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      }
     }
     return;
   }
@@ -552,8 +570,12 @@
     show: () => {
       hud.style.display = '';
       hud.classList.remove('minimized');
-      startHeartbeat();
+      if (adapter && typeof adapter.clearDomCaches === 'function') {
+        adapter.clearDomCaches();
+      }
+      updatePageLabel();
       refreshLiveScoreboard();
+      startHeartbeat();
     },
     hide: () => {
       stopHeartbeat();
@@ -569,6 +591,22 @@
       delete window.gloBusHUD;
     }
   };
+
+  // Proactively refresh live page label and scoreboard when user clicks any navigation or tab elements
+  document.addEventListener('click', (e) => {
+    if (e.target && e.target.closest && e.target.closest('#globus-pilot-hud')) return;
+    setTimeout(refreshLiveScoreboard, 100);
+    setTimeout(refreshLiveScoreboard, 400);
+  });
+
+  window.addEventListener('focus', () => {
+    if (hud.style.display !== 'none') {
+      if (adapter && typeof adapter.clearDomCaches === 'function') {
+        adapter.clearDomCaches();
+      }
+      refreshLiveScoreboard();
+    }
+  });
 
   console.log('GloBus-Pilot minimal HUD ready with Live Diagnostics Console.');
 })();
