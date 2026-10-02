@@ -83,13 +83,13 @@ class OfflineOptimizer:
         best_metrics = self.sim.simulate_pro_forma(cam_design, drone_design, marketing, workforce, finance)
         best_score = self.evaluate_composite_score(best_metrics, preset)
 
-        # Coordinate descent over regional prices and advertising
+        # Coordinate descent over regional prices, advertising, and finance
         price_steps = [-30, -15, 15, 30]
         ad_steps = [-500, -250, 250, 500]
 
         for cycle in range(3):
             for region_name, mkt in marketing.items():
-                # Test Camera Price
+                # 1. Test Camera Price
                 for d_price in price_steps:
                     orig_p = mkt.camera_price
                     new_p = max(180.0, min(600.0, orig_p + d_price))
@@ -102,7 +102,7 @@ class OfflineOptimizer:
                     else:
                         mkt.camera_price = orig_p
 
-                # Test Drone Price
+                # 2. Test Drone Price
                 for d_price in [step * 2 for step in price_steps]:
                     orig_p = mkt.drone_price
                     new_p = max(600.0, min(2200.0, orig_p + d_price))
@@ -115,7 +115,7 @@ class OfflineOptimizer:
                     else:
                         mkt.drone_price = orig_p
 
-                # Test Camera Advertising
+                # 3. Test Camera Advertising
                 for d_ad in ad_steps:
                     orig_ad = mkt.camera_advertising
                     new_ad = max(500.0, min(8000.0, orig_ad + d_ad))
@@ -127,5 +127,55 @@ class OfflineOptimizer:
                         best_metrics = test_m
                     else:
                         mkt.camera_advertising = orig_ad
+
+                # 4. Test Drone Search Ads
+                for d_ad in ad_steps:
+                    orig_ad = mkt.drone_search_ads
+                    new_ad = max(500.0, min(8000.0, orig_ad + d_ad))
+                    mkt.drone_search_ads = new_ad
+                    test_m = self.sim.simulate_pro_forma(cam_design, drone_design, marketing, workforce, finance)
+                    test_score = self.evaluate_composite_score(test_m, preset)
+                    if test_score > best_score:
+                        best_score = test_score
+                        best_metrics = test_m
+                    else:
+                        mkt.drone_search_ads = orig_ad
+
+            # 5. Optimize Financial Capital Structure (Buybacks, Dividends, Debt Paydown)
+            # Test Buyback %
+            for buyback_candidate in [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]:
+                orig_bb = finance.stock_buyback_pct
+                finance.stock_buyback_pct = buyback_candidate
+                test_m = self.sim.simulate_pro_forma(cam_design, drone_design, marketing, workforce, finance)
+                test_score = self.evaluate_composite_score(test_m, preset)
+                if test_score > best_score:
+                    best_score = test_score
+                    best_metrics = test_m
+                else:
+                    finance.stock_buyback_pct = orig_bb
+
+            # Test Dividends per share
+            for div_candidate in [0.0, 0.25, 0.50, 0.75, 1.00, 1.50]:
+                orig_div = finance.dividend_per_share
+                finance.dividend_per_share = div_candidate
+                test_m = self.sim.simulate_pro_forma(cam_design, drone_design, marketing, workforce, finance)
+                test_score = self.evaluate_composite_score(test_m, preset)
+                if test_score > best_score:
+                    best_score = test_score
+                    best_metrics = test_m
+                else:
+                    finance.dividend_per_share = orig_div
+
+            # Test Debt Paydown
+            for debt_candidate in [0.0, 2500.0, 5000.0, 10000.0]:
+                orig_debt = finance.debt_paydown
+                finance.debt_paydown = debt_candidate
+                test_m = self.sim.simulate_pro_forma(cam_design, drone_design, marketing, workforce, finance)
+                test_score = self.evaluate_composite_score(test_m, preset)
+                if test_score > best_score:
+                    best_score = test_score
+                    best_metrics = test_m
+                else:
+                    finance.debt_paydown = orig_debt
 
         return marketing, finance, best_metrics

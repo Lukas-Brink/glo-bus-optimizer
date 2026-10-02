@@ -1,0 +1,35 @@
+{
+  "name": "glo-bus-optimizer",
+  "version": "2.1.2",
+  "description": "Autonomous multi-objective decision optimizer and simulation suite for GLO-BUS (Action Cameras & UAV Drones)",
+  "main": "extension/optimizer.js",
+  "scripts": {
+    "test": "node tests/test_extension.js && python -m unittest discover tests",
+    "test:extension": "node tests/test_extension.js",
+    "test:simulator": "python -m unittest discover tests",
+    "bundle": "node scripts/bundle_userscript.js",
+    "package": "node scripts/package_release.js"
+  },
+  "keywords": [
+    "glo-bus",
+    "glo-bus-optimizer",
+    "business-simulation",
+    "decision-support",
+    "optimization",
+    "webextension",
+    "userscript",
+    "bookmarklet",
+    "tampermonkey",
+    "violentmonkey"
+  ],
+  "author": "Lukas Brink",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Lukas-Brink/glo-bus-optimizer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Lukas-Brink/glo-bus-optimizer/issues"
+  },
+  "homepage": "https://github.com/Lukas-Brink/glo-bus-optimizer#readme"
+}

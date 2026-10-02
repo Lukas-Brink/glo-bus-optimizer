@@ -7,7 +7,7 @@ from globus_model import CameraDesign, DroneDesign, WorkforceCompensation, Finan
 
 STRATEGY_PRESETS = {
     "grand_champion": {
-        "title": "🏆 Grand Champion (Balanced Scorecard)",
+        "title": "Grand Champion (Balanced Scorecard)",
         "summary": "Achieves industry #1 rank across all 5 scoring criteria (EPS, ROE, Stock Price, Credit Rating, Image Rating).",
         "camera_design": CameraDesign(
             megapixels=16.0,
@@ -54,7 +54,7 @@ STRATEGY_PRESETS = {
     },
 
     "max_eps": {
-        "title": "🚀 Wall Street Bull (EPS & Buyback Maximizer)",
+        "title": "Wall Street Bull (EPS & Buyback Maximizer)",
         "summary": "Aggressive focus on maximizing Earnings Per Share, stock buybacks, and lean cost management.",
         "camera_design": CameraDesign(
             megapixels=12.0,

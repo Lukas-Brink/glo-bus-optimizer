@@ -1,42 +1,113 @@
-/* GloBus-Pilot Floating HUD Styles */
+/* ==========================================================================
+   GloBus-Pilot // Sharplink Minimalist Frosted Glass HUD
+   Light Blue/Grey Frosted Gradient Surface with Darker Transparent Grey Glass Elements
+   Inspired by Sharplink (https://www.sharplink.com/)
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Frosted Glass Outer Surface (Subtle Light Blue/Grey Gradient) */
+  --sl-glass-bg: linear-gradient(155deg, rgba(242, 247, 253, 0.82) 0%, rgba(226, 235, 246, 0.70) 50%, rgba(212, 224, 238, 0.76) 100%);
+  
+  /* Inner Elements: Visibly Darker & Transparent Grey Glass */
+  --sl-glass-card: rgba(15, 23, 42, 0.055);
+  --sl-glass-card-hover: rgba(15, 23, 42, 0.095);
+  --sl-glass-drawer: rgba(15, 23, 42, 0.055);
+  
+  /* Hairline Borders with Defined Contrast */
+  --sl-border: rgba(15, 23, 42, 0.12);
+  --sl-border-subtle: rgba(15, 23, 42, 0.07);
+  --sl-border-hover: rgba(15, 23, 42, 0.24);
+  
+  /* Transparent Grey Buttons (Sharplink Style) */
+  --sl-btn-primary-bg: rgba(15, 23, 42, 0.11);
+  --sl-btn-primary-border: rgba(15, 23, 42, 0.20);
+  --sl-btn-primary-text: #0b0f19;
+  --sl-btn-primary-hover: rgba(15, 23, 42, 0.19);
+  --sl-btn-primary-hover-border: rgba(15, 23, 42, 0.32);
+  --sl-btn-primary-active: rgba(15, 23, 42, 0.26);
+  
+  --sl-btn-secondary-bg: rgba(15, 23, 42, 0.055);
+  --sl-btn-secondary-border: rgba(15, 23, 42, 0.12);
+  --sl-btn-secondary-text: #334155;
+  --sl-btn-secondary-hover: rgba(15, 23, 42, 0.12);
+  --sl-btn-secondary-hover-text: #0b0f19;
+  
+  /* Accent & Status Colors */
+  --sl-brand-blue: #0e76ff;
+  --sl-safe: #059669;
+  --sl-warn: #d97706;
+  --sl-danger: #dc2626;
+  
+  /* Typography Colors */
+  --sl-text-primary: #0b0f19;
+  --sl-text-secondary: #475569;
+  --sl-text-muted: #64748b;
+  
+  /* Fonts */
+  --sl-font-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --sl-font-mono: 'JetBrains Mono', 'SF Mono', Consolas, Menlo, monospace;
+}
+
+/* ==========================================================================
+   HUD Monolith Container (Frosted Blue/Grey Gradient Glass & Sharp 0px Corners)
+   ========================================================================== */
 #globus-pilot-hud {
   position: fixed;
   top: 24px;
   right: 24px;
-  width: 360px;
-  background: rgba(18, 22, 34, 0.95);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(80, 110, 240, 0.3);
-  border-radius: 14px;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 20px rgba(66, 133, 244, 0.15);
-  color: #f1f5f9;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  font-size: 13px;
+  width: 330px;
+  background: var(--sl-glass-bg);
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  border: 1px solid var(--sl-border);
+  border-radius: 0px;
+  box-shadow: 
+    0 20px 48px rgba(15, 23, 42, 0.14),
+    0 1px 0 rgba(255, 255, 255, 0.95) inset;
+  color: var(--sl-text-primary);
+  font-family: var(--sl-font-sans);
+  font-size: 12px;
   z-index: 9999999;
-  overflow: hidden;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: visible;
+  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), height 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.15s ease;
   user-select: none;
 }
 
+#globus-pilot-hud:hover {
+  border-color: var(--sl-border-hover);
+}
+
+/* Minimized Docked Capsule */
 #globus-pilot-hud.minimized {
-  width: 240px;
-  height: 48px;
-  border-color: rgba(66, 133, 244, 0.5);
+  width: 210px;
+  height: 38px;
+  border-color: rgba(15, 23, 42, 0.16);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.10);
+  overflow: hidden;
 }
 
 #globus-pilot-hud.minimized .hud-body {
   display: none;
 }
 
-/* Header */
+#globus-pilot-hud.minimized .hud-header {
+  border-bottom: none;
+  height: 38px;
+  padding: 0 12px;
+}
+
+/* ==========================================================================
+   Header Bar
+   ========================================================================== */
 .hud-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  background: linear-gradient(135deg, rgba(30, 41, 69, 0.9), rgba(15, 23, 42, 0.9));
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px 14px;
+  background: rgba(15, 23, 42, 0.035);
+  border-bottom: 1px solid var(--sl-border);
   cursor: grab;
 }
 
@@ -48,214 +119,513 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 700;
-  font-size: 14px;
-  letter-spacing: 0.3px;
-  color: #fff;
 }
 
-.hud-badge {
-  background: linear-gradient(135deg, #3b82f6, #6366f1);
-  color: white;
-  padding: 2px 7px;
-  border-radius: 6px;
-  font-size: 10px;
-  font-weight: 600;
+.hud-status-beacon {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--sl-brand-blue);
+  flex-shrink: 0;
+}
+
+.hud-brand-title {
+  font-family: var(--sl-font-sans);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
+  color: var(--sl-text-primary);
 }
 
 .hud-actions {
   display: flex;
-  gap: 6px;
+  gap: 4px;
 }
 
 .hud-icon-btn {
-  background: rgba(255, 255, 255, 0.08);
-  border: none;
-  color: #cbd5e1;
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.06);
+  border: 1px solid var(--sl-border);
+  color: var(--sl-text-secondary);
+  width: 20px;
+  height: 20px;
+  border-radius: 0px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-family: var(--sl-font-mono);
+  font-size: 10px;
   transition: all 0.15s ease;
 }
 
 .hud-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff;
+  background: rgba(15, 23, 42, 0.14);
+  border-color: var(--sl-border-hover);
+  color: var(--sl-text-primary);
 }
 
-/* Body */
+#hud-btn-close:hover {
+  background: rgba(220, 38, 38, 0.15);
+  border-color: rgba(220, 38, 38, 0.40);
+  color: var(--sl-danger);
+}
+
+/* ==========================================================================
+   HUD Body & Layout
+   ========================================================================== */
 .hud-body {
-  padding: 16px;
+  padding: 13px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  max-height: 80vh;
-  overflow-y: auto;
+  gap: 11px;
 }
 
-/* Status Banner */
-.hud-status-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
-  padding: 10px 12px;
-}
-
-.hud-status-row {
+/* Active Screen Breadcrumb (Darker Transparent Tag) */
+.hud-page-tag {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: rgba(15, 23, 42, 0.045);
+  border: 1px solid var(--sl-border);
+  border-radius: 0px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.40) inset;
 }
 
-.hud-status-title {
-  color: #94a3b8;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.hud-status-badge {
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 10px;
+.hud-page-eyebrow {
+  font-family: var(--sl-font-mono);
+  font-size: 9px;
   font-weight: 600;
-  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--sl-text-muted);
 }
 
-.status-idle { background: #334155; color: #94a3b8; }
-.status-running { background: #065f46; color: #34d399; animation: pulseGlow 1.5s infinite; }
-.status-paused { background: #78350f; color: #fbbf24; }
-.status-completed { background: #1e3a8a; color: #60a5fa; }
-
-@keyframes pulseGlow {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+.hud-page-title {
+  font-family: var(--sl-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sl-text-primary);
+  letter-spacing: 0.02em;
 }
 
-/* Metrics Grid */
+/* ==========================================================================
+   Metrics Scorecard (Darker Transparent Grey Glass Tiles)
+   ========================================================================== */
 .hud-metrics-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 7px;
 }
 
-.hud-metric-box {
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  padding: 8px 10px;
+.hud-metric-card {
+  background: var(--sl-glass-card);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--sl-border);
+  border-radius: 0px;
+  padding: 9px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 0 rgba(255, 255, 255, 0.50) inset;
 }
 
 .hud-metric-label {
-  font-size: 11px;
-  color: #94a3b8;
+  font-family: var(--sl-font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--sl-text-secondary);
+  letter-spacing: 0.06em;
 }
 
 .hud-metric-val {
-  font-size: 17px;
+  font-family: var(--sl-font-mono);
+  font-size: 18px;
   font-weight: 700;
-  color: #38bdf8;
-  margin-top: 2px;
+  color: var(--sl-text-primary);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  margin-top: 1px;
 }
 
 .hud-metric-sub {
-  font-size: 10px;
-  color: #64748b;
+  font-family: var(--sl-font-mono);
+  font-size: 9.5px;
+  color: var(--sl-text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
 }
 
-/* Controls */
-.hud-control-group {
-  display: flex;
+.hud-cash-safe {
+  color: var(--sl-safe);
+}
+
+.hud-cash-warn {
+  color: var(--sl-warn);
+}
+
+.hud-cash-danger {
+  color: var(--sl-danger);
+}
+
+/* ==========================================================================
+   Live Progress Bar
+   ========================================================================== */
+.hud-progress-wrap {
+  display: none;
   flex-direction: column;
-  gap: 6px;
-}
-
-.hud-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: #cbd5e1;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-}
-
-.hud-select, .hud-input {
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #f8fafc;
+  gap: 5px;
   padding: 8px 10px;
-  border-radius: 6px;
-  font-size: 12px;
-  outline: none;
-  transition: border-color 0.15s;
+  background: rgba(15, 23, 42, 0.045);
+  border: 1px solid var(--sl-border-subtle);
+  border-radius: 0px;
 }
 
-.hud-select:focus, .hud-input:focus {
-  border-color: #3b82f6;
+.hud-progress-wrap.visible {
+  display: flex;
 }
 
-/* Buttons */
-.hud-btn-primary {
-  background: linear-gradient(135deg, #2563eb, #4f46e5);
-  color: white;
-  border: none;
-  padding: 10px;
-  border-radius: 8px;
+.hud-progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.hud-status-text {
+  font-family: var(--sl-font-mono);
+  font-size: 9.5px;
+  color: var(--sl-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hud-progress-bar-bg {
+  height: 2px;
+  background: rgba(15, 23, 42, 0.10);
+  border-radius: 0px;
+  overflow: hidden;
+}
+
+.hud-progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--sl-text-primary);
+  transition: width 0.2s ease;
+}
+
+/* ==========================================================================
+   Toast Notification
+   ========================================================================== */
+.hud-toast {
+  display: none;
+  padding: 7px 11px;
+  background: rgba(5, 150, 105, 0.12);
+  border: 1px solid rgba(5, 150, 105, 0.25);
+  color: var(--sl-safe);
+  border-radius: 0px;
+  font-family: var(--sl-font-mono);
+  font-size: 10px;
   font-weight: 600;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.hud-toast.visible {
+  display: block;
+}
+
+/* ==========================================================================
+   Sharplink Primary Button (Transparent Grey Glass with Sharp Corners)
+   ========================================================================== */
+.hud-btn-primary {
   width: 100%;
+  height: 38px;
+  background: var(--sl-btn-primary-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--sl-btn-primary-border);
+  color: var(--sl-btn-primary-text);
+  border-radius: 0px;
+  font-family: var(--sl-font-sans);
+  font-weight: 700;
+  font-size: 11.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 0 rgba(255, 255, 255, 0.50) inset;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
 }
 
 .hud-btn-primary:hover {
-  background: linear-gradient(135deg, #1d4ed8, #4338ca);
-  transform: translateY(-1px);
+  background: var(--sl-btn-primary-hover);
+  border-color: var(--sl-btn-primary-hover-border);
+  color: #000000;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.10);
 }
 
-.hud-btn-group {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+.hud-btn-primary:active {
+  background: var(--sl-btn-primary-active);
+}
+
+.hud-btn-text {
+  flex: 1;
+  text-align: center;
+}
+
+.hud-btn-arrow {
+  font-family: var(--sl-font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  transition: transform 0.15s ease;
+  margin-left: 6px;
+}
+
+.hud-btn-primary:hover .hud-btn-arrow {
+  transform: translateX(3px);
+}
+
+.hud-btn-primary.running {
+  background: rgba(220, 38, 38, 0.18);
+  border-color: rgba(220, 38, 38, 0.45);
+  color: var(--sl-danger);
+}
+
+.hud-btn-primary.running:hover {
+  background: rgba(220, 38, 38, 0.28);
+}
+
+/* Secondary Button Row (Transparent Grey Glass Buttons) */
+.hud-secondary-row {
+  display: flex;
+  gap: 7px;
 }
 
 .hud-btn-secondary {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #cbd5e1;
-  padding: 8px;
-  border-radius: 6px;
-  font-weight: 500;
+  flex: 1;
+  height: 32px;
+  background: var(--sl-btn-secondary-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--sl-btn-secondary-border);
+  color: var(--sl-btn-secondary-text);
+  border-radius: 0px;
+  font-family: var(--sl-font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.40) inset;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hud-btn-secondary:hover {
+  background: var(--sl-btn-secondary-hover);
+  border-color: var(--sl-border-hover);
+  color: var(--sl-btn-secondary-hover-text);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+}
+
+/* ==========================================================================
+   Activity Log & Diagnostics Drawer (Darker Transparent Grey)
+   ========================================================================== */
+.hud-drawer-section {
+  border-top: 1px solid var(--sl-border);
+  margin-top: 2px;
+  padding-top: 8px;
+}
+
+.hud-drawer-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--sl-text-secondary);
+  font-family: var(--sl-font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  padding: 5px 6px;
+  border-radius: 0px;
+  transition: color 0.15s ease;
+}
+
+.hud-drawer-toggle:hover {
+  color: var(--sl-text-primary);
+}
+
+.hud-toggle-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hud-drawer-arrow {
+  font-size: 8px;
+  color: var(--sl-text-muted);
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+.hud-log-badge {
+  background: rgba(15, 23, 42, 0.08);
+  color: var(--sl-text-secondary);
+  border: 1px solid var(--sl-border-subtle);
+  font-family: var(--sl-font-mono);
+  font-size: 8.5px;
+  padding: 1px 5px;
+  border-radius: 0px;
+  font-weight: 600;
+}
+
+.hud-drawer-panel {
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.hud-drawer-panel.open {
+  display: flex;
+}
+
+.hud-drawer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hud-toolbar-label {
+  font-family: var(--sl-font-mono);
+  font-size: 8.5px;
+  color: var(--sl-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.hud-toolbar-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.hud-tool-btn {
+  background: rgba(15, 23, 42, 0.06);
+  border: 1px solid var(--sl-border-subtle);
+  color: var(--sl-text-secondary);
+  padding: 2px 7px;
+  border-radius: 0px;
+  font-family: var(--sl-font-mono);
+  font-size: 8.5px;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
-.hud-btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
+.hud-tool-btn:hover {
+  background: rgba(15, 23, 42, 0.14);
+  color: var(--sl-text-primary);
+  border-color: var(--sl-border);
 }
 
-.hud-btn-danger {
-  background: rgba(220, 38, 38, 0.15);
-  border: 1px solid rgba(220, 38, 38, 0.3);
-  color: #f87171;
+/* Console Terminal Box (Darker Transparent Panel) */
+.hud-terminal {
+  background: var(--sl-glass-drawer);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--sl-border);
+  border-radius: 0px;
+  padding: 8px 10px;
+  max-height: 170px;
+  min-height: 90px;
+  overflow-y: auto;
+  font-family: var(--sl-font-mono);
+  font-size: 9.5px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--sl-text-primary);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.40) inset;
 }
 
-.hud-btn-danger:hover {
-  background: rgba(220, 38, 38, 0.25);
-  color: #fca5a5;
+.hud-terminal::-webkit-scrollbar {
+  width: 3px;
 }
 
-.hud-footer {
-  font-size: 10px;
-  color: #64748b;
+.hud-terminal::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.hud-terminal::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.15);
+  border-radius: 0px;
+}
+
+.hud-terminal::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.30);
+}
+
+.hud-log-empty {
+  color: var(--sl-text-muted);
+  font-style: italic;
   text-align: center;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-  padding-top: 8px;
+  padding: 22px 8px;
 }
+
+.hud-log-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  word-break: break-word;
+}
+
+.hud-log-time {
+  color: var(--sl-text-muted);
+  font-size: 8.5px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.hud-log-tag {
+  font-weight: 600;
+  flex-shrink: 0;
+  font-size: 9px;
+}
+
+.hud-log-msg {
+  color: var(--sl-text-primary);
+  flex: 1;
+}
+
+/* Sharplink Clean Log Colors */
+.hud-log-info .hud-log-tag { color: var(--sl-brand-blue); }
+.hud-log-info .hud-log-msg { color: #1e293b; }
+
+.hud-log-success .hud-log-tag { color: var(--sl-safe); }
+.hud-log-success .hud-log-msg { color: #064e3b; }
+
+.hud-log-warn .hud-log-tag { color: var(--sl-warn); }
+.hud-log-warn .hud-log-msg { color: #78350f; }
+
+.hud-log-error .hud-log-tag { color: var(--sl-danger); }
+.hud-log-error .hud-log-msg { color: #7f1d1d; }
+
+.hud-log-step .hud-log-tag { color: #7c3aed; }
+.hud-log-step .hud-log-msg { color: #3b0764; }

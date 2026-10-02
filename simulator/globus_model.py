@@ -236,12 +236,25 @@ class GloBusCompanySimulation:
         operating_cash_flow = net_profit + depreciation
         share_repurchase_cost = repurchase_shares * stock_price
         cash_flow_financing = finance.new_debt_issued - finance.debt_paydown - dividends_paid - share_repurchase_cost
-        ending_cash = finance.beginning_cash + operating_cash_flow + cash_flow_financing
+        unadjusted_ending_cash = finance.beginning_cash + operating_cash_flow + cash_flow_financing
+
+        emergency_overdraft = 0.0
+        if unadjusted_ending_cash < 0:
+            emergency_overdraft = abs(unadjusted_ending_cash)
+            # Glo-Bus penalizes overdraft with steep 12%+ emergency loan interest
+            net_profit -= emergency_overdraft * 0.12 * 0.70
+            ending_cash = 0.0
+        else:
+            ending_cash = unadjusted_ending_cash
 
         # Credit Rating approximation
         interest_coverage = ebit / max(1.0, interest_expense)
-        debt_to_equity = (finance.bank_debt_balance - finance.debt_paydown) / max(1.0, ending_equity)
-        if interest_coverage > 8.0 and debt_to_equity < 0.25 and ending_cash > 5000:
+        debt_to_equity = (finance.bank_debt_balance - finance.debt_paydown + emergency_overdraft) / max(1.0, ending_equity)
+
+        if emergency_overdraft > 0:
+            credit_rating = "C"
+            credit_score = 45
+        elif interest_coverage > 8.0 and debt_to_equity < 0.25 and ending_cash > 5000:
             credit_rating = "A+"
             credit_score = 100
         elif interest_coverage > 5.5 and debt_to_equity < 0.40 and ending_cash > 2500:
@@ -250,7 +263,7 @@ class GloBusCompanySimulation:
         elif interest_coverage > 4.0 and ending_cash > 1000:
             credit_rating = "A-"
             credit_score = 90
-        elif interest_coverage > 2.5:
+        elif interest_coverage > 2.5 and ending_cash >= 0:
             credit_rating = "B+"
             credit_score = 82
         else:
@@ -268,6 +281,8 @@ class GloBusCompanySimulation:
             "net_profit": round(net_profit, 1),
             "net_revenue": round(total_revenue, 1),
             "ending_cash": round(ending_cash, 1),
+            "total_camera_units": round(total_cam_units, 1),
+            "total_drone_units": round(total_drone_units, 1),
             "camera_pq": cam_pq,
             "drone_pq": drone_pq,
             "credit_rating": credit_rating,

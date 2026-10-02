@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>GLO-BUS Simulation Portal (Mock)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; background: #eef2f6; display: flex; height: 100vh; overflow: hidden; }
+    
+    /* Left Navigation Sidebar (The Left Pane) */
+    #sidebar {
+      width: 240px;
+      background: #1e293b;
+      color: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      border-right: 2px solid #0f172a;
+    }
+    .sidebar-header {
+      padding: 16px;
+      font-size: 15px;
+      font-weight: bold;
+      background: #0f172a;
+      border-bottom: 1px solid #334155;
+    }
+    .tab-nav {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      padding: 10px 0;
+    }
+    .tab-nav li a {
+      display: block;
+      padding: 12px 16px;
+      color: #cbd5e1;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      transition: all 0.15s;
+    }
+    .tab-nav li a:hover {
+      background: #334155;
+      color: #fff;
+    }
+    .tab-nav li a.active {
+      background: #2563eb;
+      color: #fff;
+      border-left-color: #60a5fa;
+      font-weight: bold;
+    }
+
+    /* Main Workspace */
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    /* Scoreboard Header */
+    .scoreboard-box {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .scoreboard-box h3 {
+      font-size: 13px;
+      color: #475569;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    table.scoreboard {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    table.scoreboard th, table.scoreboard td {
+      border: 1px solid #e2e8f0;
+      padding: 6px 12px;
+      text-align: right;
+    }
+    table.scoreboard th {
+      background: #f8fafc;
+      color: #64748b;
+      font-weight: 600;
+    }
+    table.scoreboard td:first-child, table.scoreboard th:first-child {
+      text-align: left;
+    }
+
+    /* Form Content */
+    .tab-content {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      flex: 1;
+    }
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .form-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-top: 12px;
+    }
+    .form-table th, .form-table td {
+      border: 1px solid #e2e8f0;
+      padding: 8px 12px;
+    }
+    .form-table th { background: #f1f5f9; text-align: left; }
+    .form-table input, .form-table select {
+      padding: 6px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      font-size: 13px;
+      width: 140px;
+    }
+
+    /* Actions Bar */
+    .actions-bar {
+      margin-top: 20px;
+      display: flex;
+      gap: 12px;
+    }
+    .btn {
+      padding: 10px 18px;
+      font-size: 13px;
+      font-weight: bold;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-calc { background: #64748b; color: white; }
+    .btn-save { background: #16a34a; color: white; }
+    .btn-calc:hover { background: #475569; }
+    .btn-save:hover { background: #15803d; }
+  </style>
+
+  <!-- Load Extension Styles and Scripts directly in test environment -->
+  <link rel="stylesheet" href="../../extension/hud.css">
+</head>
+<body>
+
+  <!-- Left Sidebar (Tabs) -->
+  <div id="sidebar">
+    <div class="sidebar-header">GLO-BUS DECISIONS</div>
+    <ul class="tab-nav">
+      <li><a class="active" data-target="pd">Product Design</a></li>
+      <li><a data-target="wf">Workforce & Compensation</a></li>
+      <li><a data-target="cm">Camera Marketing</a></li>
+      <li><a data-target="dm">Drone Marketing</a></li>
+      <li><a data-target="fin">Finance & Cash Flow</a></li>
+    </ul>
+  </div>
+
+  <!-- Main Content -->
+  <div id="main">
+    <!-- Live Scoreboard -->
+    <div class="scoreboard-box">
+      <h3>Projected Company Performance (Scoreboard)</h3>
+      <table class="scoreboard" id="scoreboard-table">
+        <thead>
+          <tr>
+            <th>Measure</th>
+            <th>Projected</th>
+            <th>Prior Year</th>
+            <th>Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Earnings Per Share (EPS)</td>
+            <td id="score-eps">$5.15</td>
+            <td>$4.80</td>
+            <td>+$0.35</td>
+          </tr>
+          <tr>
+            <td>Return on Equity (ROE)</td>
+            <td id="score-roe">67.7%</td>
+            <td>62.0%</td>
+            <td>+5.7%</td>
+          </tr>
+          <tr>
+            <td>Ending Cash</td>
+            <td id="score-cash">$17,871</td>
+            <td>$12,400</td>
+            <td>+$5,471</td>
+          </tr>
+          <tr>
+            <td>Credit Rating</td>
+            <td id="score-credit">A-</td>
+            <td>B+</td>
+            <td>+1 notch</td>
+          </tr>
+          <tr>
+            <td>Image Rating</td>
+            <td id="score-image">64</td>
+            <td>60</td>
+            <td>+4</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Tab Panels (Preserve dirty state without page reload) -->
+    <div class="tab-content">
+      <!-- 1. Product Design Panel -->
+      <div id="panel-pd" class="panel active">
+        <h2>Product Design Specifications</h2>
+        <table class="form-table">
+          <tr>
+            <th>Decision Item</th>
+            <th>Entry</th>
+          </tr>
+          <tr>
+            <td>Image Sensor Size</td>
+            <td>
+              <select name="sensorSize" class="input-field">
+                <option value="1">Small (0.5")</option>
+                <option value="2">Medium (0.8")</option>
+                <option value="3" selected>Standard (1.0")</option>
+                <option value="4">Large (1.5")</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td>Number of AC Camera Models</td>
+            <td>
+              <input type="number" name="cameraModels" class="input-field" value="3" min="1" max="5" step="1">
+            </td>
+          </tr>
+          <tr>
+            <td>Body Frame Construction</td>
+            <td>
+              <select name="frameBuild" class="input-field">
+                <option value="1" selected>Polycarbonate</option>
+                <option value="2">Carbon Fiber</option>
+                <option value="3">Magnesium Alloy</option>
+              </select>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- 2. Workforce Panel -->
+      <div id="panel-wf" class="panel">
+        <h2>Workforce & Compensation</h2>
+        <table class="form-table">
+          <tr>
+            <th>Decision Item</th>
+            <th>Entry</th>
+          </tr>
+          <tr>
+            <td>Base Wage (per PAT member)</td>
+            <td><input type="number" name="baseWage" class="input-field" value="28000" min="20000" max="45000" step="500"></td>
+          </tr>
+          <tr>
+            <td>Attendance Bonus</td>
+            <td><input type="number" name="attBonus" class="input-field" value="800" min="0" max="2500" step="100"></td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- 3. Camera Marketing Panel -->
+      <div id="panel-cm" class="panel">
+        <h2>Camera Marketing (Regional)</h2>
+        <table class="form-table">
+          <tr>
+            <th>Decision Item</th>
+            <th>Entry</th>
+          </tr>
+          <tr>
+            <td>N.A. Wholesale Price</td>
+            <td><input type="number" name="naPrice" class="input-field" value="367" min="150" max="800" step="5"></td>
+          </tr>
+          <tr>
+            <td>N.A. Advertising Budget</td>
+            <td><input type="number" name="naAds" class="input-field" value="2400" min="0" max="15000" step="250"></td>
+          </tr>
+          <tr>
+            <td>E-A Wholesale Price</td>
+            <td><input type="number" name="eaPrice" class="input-field" value="390" min="150" max="800" step="5"></td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- 4. Drone Marketing Panel -->
+      <div id="panel-dm" class="panel">
+        <h2>Drone Marketing (Regional)</h2>
+        <table class="form-table">
+          <tr>
+            <th>Decision Item</th>
+            <th>Entry</th>
+          </tr>
+          <tr>
+            <td>UAV Drone Price</td>
+            <td><input type="number" name="dronePrice" class="input-field" value="1250" min="500" max="2500" step="10"></td>
+          </tr>
+          <tr>
+            <td>UAV Drone Advertising</td>
+            <td><input type="number" name="droneAds" class="input-field" value="3000" min="0" max="12000" step="250"></td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- 5. Finance Panel -->
+      <div id="panel-fin" class="panel">
+        <h2>Finance & Cash Flow</h2>
+        <table class="form-table">
+          <tr>
+            <th>Decision Item</th>
+            <th>Entry</th>
+          </tr>
+          <tr>
+            <td>Dividend per Share</td>
+            <td><input type="number" name="dividend" class="input-field" value="1.50" min="0" max="5.0" step="0.10"></td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Actions -->
+      <div class="actions-bar">
+        <button class="btn btn-calc" id="btn-calc">Calculate Projected Scores</button>
+        <button class="btn btn-save" id="btn-save">Save Decision Entries</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Tab switching logic (NO PAGE RELOAD, identical to Glo-Bus)
+    const tabLinks = document.querySelectorAll('.tab-nav a');
+    const panels = {
+      'pd': document.getElementById('panel-pd'),
+      'wf': document.getElementById('panel-wf'),
+      'cm': document.getElementById('panel-cm'),
+      'dm': document.getElementById('panel-dm'),
+      'fin': document.getElementById('panel-fin')
+    };
+
+    tabLinks.forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        tabLinks.forEach(l => l.classList.remove('active'));
+        link.classList.add('active');
+
+        Object.values(panels).forEach(p => p.classList.remove('active'));
+        const target = link.getAttribute('data-target');
+        if (panels[target]) panels[target].classList.add('active');
+
+        // Trigger in-page update
+        recalculate();
+      });
+    });
+
+    // Scoreboard calculator
+    function recalculate() {
+      const naPrice = parseFloat(document.querySelector('input[name="naPrice"]')?.value || 367);
+      const naAds = parseFloat(document.querySelector('input[name="naAds"]')?.value || 2400);
+      const camModels = parseFloat(document.querySelector('input[name="cameraModels"]')?.value || 3);
+
+      // Model: Slight price discount + healthy advertising expands EPS
+      let eps = 5.15;
+      if (naPrice < 367 && naPrice > 350) eps += 0.20;
+      if (naAds > 2400 && naAds < 3500) eps += 0.15;
+      if (camModels === 2) eps += 0.08;
+
+      document.getElementById('score-eps').textContent = `$${eps.toFixed(2)}`;
+      document.getElementById('score-roe').textContent = `${(67.7 + (eps - 5.15) * 4).toFixed(1)}%`;
+      document.getElementById('score-cash').textContent = `$${Math.round(17871 + (eps - 5.15) * 500)}`;
+    }
+
+    document.getElementById('btn-calc').addEventListener('click', () => {
+      recalculate();
+    });
+
+    document.getElementById('btn-save').addEventListener('click', () => {
+      window._decisionsSaved = true;
+      alert('Decisions saved successfully to server!');
+    });
+  </script>
+
+  <!-- Load Glo-Bus Optimizer Extension Scripts -->
+  <script src="../../extension/dom-adapter.js"></script>
+  <script src="../../extension/optimizer.js"></script>
+  <script src="../../extension/page-coordinator.js"></script>
+  <script src="../../extension/hud.js"></script>
+</body>
+</html>

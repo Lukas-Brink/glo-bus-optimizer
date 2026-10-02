@@ -2,7 +2,7 @@
 # Checks system environment and sets up Python CLI dependencies if desired.
 
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "  ⚡ GLOBUS-PILOT SETUP & ENVIRONMENT INITIALIZER" -ForegroundColor Cyan
+Write-Host "  GLOBUS-PILOT SETUP & ENVIRONMENT INITIALIZER" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
 # 1. Check Browser Extension / Bookmarklet status

@@ -4,78 +4,174 @@
   <meta charset="utf-8">
   <title>GloBus-Pilot</title>
   <style>
-    body {
-      width: 260px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #0f172a;
-      color: #f8fafc;
-      margin: 0;
-      padding: 16px;
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+    :root {
+      --sl-glass: rgba(240, 243, 248, 0.75);
+      --sl-card: rgba(15, 23, 42, 0.055);
+      --sl-border: rgba(15, 23, 42, 0.12);
+      --sl-btn-primary-bg: rgba(15, 23, 42, 0.12);
+      --sl-btn-primary-border: rgba(15, 23, 42, 0.22);
+      --sl-btn-primary-text: #0b0f19;
+      --sl-btn-primary-hover: rgba(15, 23, 42, 0.20);
+      --sl-btn-primary-hover-border: rgba(15, 23, 42, 0.35);
+      --sl-btn-primary-active: rgba(15, 23, 42, 0.28);
+      --sl-text: #0b0f19;
+      --sl-muted: #475569;
+      --sl-dim: #64748b;
+      --sl-brand-blue: #0e76ff;
     }
-    h3 {
-      margin: 0 0 8px 0;
-      font-size: 15px;
-      color: #38bdf8;
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 280px;
+      font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--sl-glass);
+      backdrop-filter: blur(28px) saturate(180%);
+      -webkit-backdrop-filter: blur(28px) saturate(180%);
+      color: var(--sl-text);
+      padding: 16px;
+      border: 1px solid var(--sl-border);
+      border-radius: 0px;
+      box-shadow: 0 16px 36px rgba(15, 23, 42, 0.12);
+    }
+
+    .header {
       display: flex;
       align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--sl-border);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .beacon {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--sl-brand-blue);
+    }
+
+    h3 {
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--sl-text);
+    }
+
+    .info-card {
+      background: var(--sl-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--sl-border);
+      border-radius: 0px;
+      padding: 10px 12px;
+      margin-bottom: 14px;
+    }
+
+    .info-eyebrow {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8.5px;
+      font-weight: 600;
+      color: var(--sl-dim);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    p {
+      font-size: 11px;
+      color: var(--sl-muted);
+      line-height: 1.45;
+    }
+
+    .btn-main {
+      width: 100%;
+      height: 38px;
+      background: var(--sl-btn-primary-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--sl-btn-primary-border);
+      color: var(--sl-btn-primary-text);
+      border-radius: 0px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 11.5px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       gap: 6px;
     }
-    p {
+
+    .btn-main:hover {
+      background: var(--sl-btn-primary-hover);
+      border-color: var(--sl-btn-primary-hover-border);
+      color: #000000;
+      box-shadow: 0 3px 10px rgba(15, 23, 42, 0.10);
+    }
+
+    .btn-main:active {
+      background: var(--sl-btn-primary-active);
+    }
+
+    .arrow {
+      font-family: 'JetBrains Mono', monospace;
       font-size: 12px;
-      color: #94a3b8;
-      line-height: 1.4;
-      margin: 0 0 14px 0;
+      font-weight: 700;
+      transition: transform 0.15s ease;
     }
-    button {
-      width: 100%;
-      background: linear-gradient(135deg, #2563eb, #4f46e5);
-      border: none;
-      color: white;
-      padding: 9px;
-      border-radius: 6px;
-      font-weight: 600;
-      font-size: 12px;
-      cursor: pointer;
+
+    .btn-main:hover .arrow {
+      transform: translateX(3px);
     }
-    button:hover {
-      background: linear-gradient(135deg, #1d4ed8, #4338ca);
-    }
-    .badge {
-      display: inline-block;
-      background: #1e293b;
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 10px;
-      color: #38bdf8;
+
+    .subtext {
+      display: block;
       margin-top: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8.5px;
+      letter-spacing: 0.06em;
+      color: var(--sl-dim);
       text-align: center;
-      width: 100%;
-      box-sizing: border-box;
+      text-transform: uppercase;
     }
   </style>
 </head>
 <body>
-  <h3>⚡ GloBus-Pilot</h3>
-  <p>Decision optimizer is active. Navigate to any GLO-BUS decision screen to view the floating HUD.</p>
-  <button id="reopen-hud">Open / Focus HUD</button>
-  <div class="badge">Program 21 • Ready</div>
+  <div class="header">
+    <div class="brand">
+      <span class="beacon"></span>
+      <h3>GLOBUS PILOT</h3>
+    </div>
+  </div>
 
-  <script>
-    document.getElementById('reopen-hud').addEventListener('click', async () => {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (tab && tab.id) {
-        chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: () => {
-            const hud = document.getElementById('globus-pilot-hud');
-            if (hud) {
-              hud.style.display = 'block';
-              hud.classList.remove('minimized');
-            }
-          }
-        });
-      }
-    });
-  </script>
+  <div class="info-card">
+    <div class="info-eyebrow">SYSTEM READY</div>
+    <p>Autonomous decision optimizer for GLO-BUS. Navigate to any decision page and summon the floating HUD.</p>
+  </div>
+
+  <button class="btn-main" id="reopen-hud">
+    <span>OPEN CONTROLLER HUD</span>
+    <span class="arrow">→</span>
+  </button>
+  <span class="subtext">COMPATIBLE WITH GLO-BUS.COM</span>
+
+  <script src="popup.js"></script>
 </body>
 </html>

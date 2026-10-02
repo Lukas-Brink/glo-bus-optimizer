@@ -13,13 +13,13 @@ You have **four convenient ways** to run Glo-Bus Optimizer:
 2. Right-click any blank space on the bookmarks toolbar and select **"Add Bookmark..."** (or "New Bookmark" / "Add Page").
 3. Set the **Name** to:
    ```text
-   ⚡ Glo-Bus Optimizer
+   Glo-Bus Optimizer
    ```
 4. In the **URL** (or Location) box, open [`bookmarklet_inline.js`](../userscript/bookmarklet_inline.js) or [`bookmarklet.txt`](../userscript/bookmarklet.txt), copy the entire single line of code starting with `javascript:`, and paste it in.
 5. Click **Save**.
 6. **How to use**:
    - Navigate to any Glo-Bus decision page (e.g. *Product Design*, *Marketing*, *Workforce & Compensation*, *Finance & Cash Flow*).
-   - Click your **⚡ Glo-Bus Optimizer** bookmark!
+   - Click your **Glo-Bus Optimizer** bookmark.
    - The dark-glass floating HUD will immediately dock on the top-right of your Glo-Bus screen.
 
 ---
