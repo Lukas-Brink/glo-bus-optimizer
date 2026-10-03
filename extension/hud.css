@@ -50,14 +50,20 @@
   --sl-font-mono: 'JetBrains Mono', 'SF Mono', Consolas, Menlo, monospace;
 }
 
-/* ==========================================================================
-   HUD Monolith Container (Frosted Blue/Grey Gradient Glass & Sharp 0px Corners)
-   ========================================================================== */
+/* Scoped Box-Sizing Isolation: immune to Glo-Bus page stylesheet content-box overrides */
+#globus-pilot-hud,
+#globus-pilot-hud *,
+#globus-pilot-hud *::before,
+#globus-pilot-hud *::after {
+  box-sizing: border-box !important;
+}
+
 #globus-pilot-hud {
   position: fixed;
   top: 24px;
   right: 24px;
-  width: 330px;
+  width: 340px;
+  max-width: calc(100vw - 32px);
   background: var(--sl-glass-bg);
   backdrop-filter: blur(28px) saturate(190%);
   -webkit-backdrop-filter: blur(28px) saturate(190%);
@@ -70,7 +76,7 @@
   font-family: var(--sl-font-sans);
   font-size: 12px;
   z-index: 9999999;
-  overflow: visible;
+  overflow: hidden;
   transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), height 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.15s ease;
   user-select: none;
 }
@@ -214,11 +220,15 @@
    ========================================================================== */
 .hud-metrics-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
+  width: 100%;
 }
 
 .hud-metric-card {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   background: var(--sl-glass-card);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -238,6 +248,9 @@
   text-transform: uppercase;
   color: var(--sl-text-secondary);
   letter-spacing: 0.06em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .hud-metric-val {
@@ -249,6 +262,9 @@
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .hud-metric-sub {

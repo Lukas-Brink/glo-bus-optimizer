@@ -381,6 +381,20 @@
       terminal.appendChild(row);
       terminal.scrollTop = terminal.scrollHeight;
     });
+
+    // Populate existing logs on page load/re-navigation
+    if (window.gloBusLogger.logs && window.gloBusLogger.logs.length > 0) {
+      logBadge.textContent = window.gloBusLogger.logs.length;
+      const emptyEl = document.getElementById('hud-log-empty');
+      if (emptyEl) emptyEl.remove();
+      window.gloBusLogger.logs.forEach(entry => {
+        const row = document.createElement('div');
+        row.className = `hud-log-row hud-log-${entry.level}`;
+        row.innerHTML = `<span class="hud-log-time">${entry.timestamp}</span> <span class="hud-log-tag">[${escapeHtml(entry.tag)}]</span> <span class="hud-log-msg">${escapeHtml(entry.message)}</span>`;
+        terminal.appendChild(row);
+      });
+      terminal.scrollTop = terminal.scrollHeight;
+    }
   }
 
   // Inspect Page Button

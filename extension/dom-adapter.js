@@ -18,7 +18,7 @@ class GloBusLogger {
         const saved = sessionStorage.getItem('globus_pilot_recent_logs');
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) this.logs = parsed.slice(-300);
+          if (Array.isArray(parsed)) this.logs = parsed.slice(-10000);
         }
       }
     } catch (_) {}
@@ -33,11 +33,13 @@ class GloBusLogger {
       data
     };
     this.logs.push(entry);
-    if (this.logs.length > 500) this.logs.shift();
+    // Keep complete session logs without dropping history (safety ceiling of 50,000 entries)
+    if (this.logs.length > 50000) this.logs.shift();
 
     try {
       if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.setItem('globus_pilot_recent_logs', JSON.stringify(this.logs));
+        const persistentLogs = this.logs.slice(-5000);
+        sessionStorage.setItem('globus_pilot_recent_logs', JSON.stringify(persistentLogs));
       }
     } catch (_) {}
 
@@ -110,14 +112,28 @@ class GloBusDOMAdapter {
     this._lastDetectedPageType = null;
     this.cachedCalcBtn = null;
     this.cachedScoreboardRows = null;
+    this.recentNotifications = [];
+    this._activeInputLabel = null;
+    this._notificationListeners = [];
+    this._observedDocs = typeof WeakSet !== 'undefined' ? new WeakSet() : new Set();
+    this._seenToastElements = typeof WeakSet !== 'undefined' ? new WeakSet() : new Set();
     // NOTE: pageType is a live getter — always reflects the current page.
     // Do NOT store it as a property; in-page tab navigation changes the page
     // without reconstructing the adapter, so a stored value would go stale.
+
+    // Initialize Toastr & Site notification listener
+    try {
+      this.initNotificationListener();
+    } catch (_) {}
   }
 
-  /** Always reflects the currently active Glo-Bus decision page. */
+  /** Always reflects the currently active Glo-Bus decision page. Allows override for testing/mocking. */
   get pageType() {
-    return this.detectPageType();
+    return this._pageTypeOverride || this.detectPageType();
+  }
+
+  set pageType(val) {
+    this._pageTypeOverride = val;
   }
 
   clearDomCaches() {
@@ -149,6 +165,258 @@ class GloBusDOMAdapter {
       } catch (_) {}
     }
     return docs;
+  }
+
+  /**
+   * Initializes real-time listening for site-level notifications:
+   * 1. CodeSeven Toastr notifications (#toast-container, .toast, .toast-error, .toast-warning)
+   * 2. In-page modal / validation alerts
+   * 3. Native window.alert overrides across all frames/iframes
+   */
+  initNotificationListener() {
+    this.attachToastObservers();
+    this.wrapWindowAlerts();
+  }
+
+  attachToastObservers() {
+    if (typeof MutationObserver === 'undefined') return;
+    try {
+      const docs = this.getAllDocuments();
+      docs.forEach(doc => {
+        if (!doc || !doc.body) return;
+        try {
+          if (this._observedDocs.has(doc)) return;
+          this._observedDocs.add(doc);
+        } catch (_) {}
+
+        const observer = new MutationObserver(mutations => {
+          this.handleDomMutations(mutations, doc);
+        });
+
+        observer.observe(doc.body, { childList: true, subtree: true });
+        
+        // Scan for any existing toasts already in the container
+        this.scanDocumentForToasts(doc);
+      });
+    } catch (_) {}
+  }
+
+  handleDomMutations(mutations, doc) {
+    if (!mutations || !Array.isArray(mutations)) return;
+    for (let i = 0; i < mutations.length; i++) {
+      const mutation = mutations[i];
+      if (mutation.type === 'childList' && mutation.addedNodes && mutation.addedNodes.length > 0) {
+        for (let j = 0; j < mutation.addedNodes.length; j++) {
+          const node = mutation.addedNodes[j];
+          if (node.nodeType === 1 /* ELEMENT_NODE */) {
+            this.inspectElementForNotification(node);
+          }
+        }
+      }
+    }
+  }
+
+  scanDocumentForToasts(doc) {
+    try {
+      if (!doc || typeof doc.querySelectorAll !== 'function') return;
+      const toasts = doc.querySelectorAll('#toast-container .toast, .toast-container .toast, .toast');
+      toasts.forEach(t => this.inspectElementForNotification(t));
+    } catch (_) {}
+  }
+
+  inspectElementForNotification(el) {
+    if (!el || typeof el.getAttribute !== 'function') return;
+    try {
+      if (this._seenToastElements.has(el)) return;
+    } catch (_) {}
+
+    // Check if element is a Toastr toast itself
+    const classStr = (typeof el.getAttribute === 'function' ? el.getAttribute('class') : '') || '';
+    const isToast = (el.classList && el.classList.contains && el.classList.contains('toast')) ||
+                    classStr.includes('toast') ||
+                    (el.id && el.id.includes('toast'));
+
+    if (isToast && (classStr.includes('toast-error') || classStr.includes('toast-warning') || classStr.includes('toast-info') || classStr.includes('toast-success') || classStr.includes('toast '))) {
+      try { this._seenToastElements.add(el); } catch (_) {}
+      this.processToastElement(el);
+    }
+
+    // Also check any child toast elements
+    if (typeof el.querySelectorAll === 'function') {
+      try {
+        const childToasts = el.querySelectorAll('#toast-container .toast, .toast-container .toast, .toast');
+        childToasts.forEach(ct => {
+          let seen = false;
+          try { seen = this._seenToastElements.has(ct); } catch (_) {}
+          if (!seen) {
+            try { this._seenToastElements.add(ct); } catch (_) {}
+            this.processToastElement(ct);
+          }
+        });
+      } catch (_) {}
+    }
+  }
+
+  processToastElement(toastEl) {
+    if (!toastEl) return;
+
+    // Determine severity
+    const classList = toastEl.classList;
+    const classStr = (typeof toastEl.getAttribute === 'function' ? toastEl.getAttribute('class') : '') || '';
+    let level = 'warn';
+    if (classStr.includes('error') || (classList && classList.contains && classList.contains('toast-error'))) {
+      level = 'error';
+    } else if (classStr.includes('warning') || (classList && classList.contains && classList.contains('toast-warning'))) {
+      level = 'warn';
+    } else if (classStr.includes('info') || (classList && classList.contains && classList.contains('toast-info'))) {
+      level = 'info';
+    } else if (classStr.includes('success') || (classList && classList.contains && classList.contains('toast-success'))) {
+      level = 'success';
+    }
+
+    // Extract title
+    let title = '';
+    const titleEl = toastEl.querySelector ? toastEl.querySelector('.toast-title') : null;
+    if (titleEl) {
+      title = (titleEl.textContent || '').trim();
+    }
+
+    // Extract message
+    let message = '';
+    const msgEl = toastEl.querySelector ? toastEl.querySelector('.toast-message') : null;
+    if (msgEl) {
+      message = (msgEl.textContent || '').trim();
+    } else {
+      const clone = toastEl.cloneNode ? toastEl.cloneNode(true) : null;
+      if (clone) {
+        const closeBtn = clone.querySelector ? clone.querySelector('.toast-close-button, button') : null;
+        if (closeBtn && closeBtn.remove) closeBtn.remove();
+        const cloneTitle = clone.querySelector ? clone.querySelector('.toast-title') : null;
+        if (cloneTitle && cloneTitle.remove) cloneTitle.remove();
+        message = (clone.textContent || '').trim();
+      } else {
+        message = (toastEl.textContent || '').trim();
+      }
+    }
+
+    if (!message && !title) return;
+
+    // Auto-learn exact limits from standard Glo-Bus toast pattern:
+    // "The <Input Name> must be a valid number between <MIN> and <MAX>."
+    const activeItem = this._activeInputItem || this._lastActiveInputItem;
+    const boundMatch = message.match(/must be a valid number between\s+(-?\d+(?:\.\d+)?)\s+and\s+(-?\d+(?:\.\d+)?)/i);
+    if (boundMatch && activeItem) {
+      const minB = parseFloat(boundMatch[1]);
+      const maxB = parseFloat(boundMatch[2]);
+      if (!isNaN(minB)) activeItem.min = minB;
+      if (!isNaN(maxB)) activeItem.max = maxB;
+      logger.info('BOUNDS-LEARNED', `Auto-calibrated [${activeItem.label || activeItem.name}] bounds from site toast: [${minB} .. ${maxB}]`);
+    }
+
+    const notification = {
+      id: 'toast_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+      type: 'toast',
+      level,
+      title,
+      message,
+      timestamp: Date.now(),
+      timeString: new Date().toLocaleTimeString(),
+      targetInput: this._activeInputLabel || null
+    };
+
+    this.recordSiteNotification(notification);
+  }
+
+  wrapWindowAlerts() {
+    try {
+      const docs = this.getAllDocuments();
+      docs.forEach(doc => {
+        const win = doc.defaultView;
+        if (!win || win._globusPilotAlertWrapped) return;
+        win._globusPilotAlertWrapped = true;
+
+        win.alert = (alertMsg) => {
+          const msgStr = String(alertMsg || '');
+          const notification = {
+            id: 'alert_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+            type: 'alert',
+            level: 'error',
+            title: 'Site Dialog',
+            message: msgStr,
+            timestamp: Date.now(),
+            timeString: new Date().toLocaleTimeString(),
+            targetInput: this._activeInputLabel || null
+          };
+          this.recordSiteNotification(notification);
+          return true;
+        };
+      });
+    } catch (_) {}
+  }
+
+  recordSiteNotification(notification) {
+    if (!notification) return;
+
+    this.recentNotifications.push(notification);
+    if (this.recentNotifications.length > 200) {
+      this.recentNotifications.shift();
+    }
+
+    const tag = notification.type === 'alert' ? 'SITE_ALERT' : 'SITE_TOAST';
+    const titlePrefix = notification.title ? `[${notification.title}] ` : '';
+    const inputSuffix = notification.targetInput ? ` (on ${notification.targetInput})` : '';
+    const fullMessage = `${titlePrefix}${notification.message}${inputSuffix}`;
+
+    if (notification.level === 'error') {
+      logger.error(tag, fullMessage, notification);
+    } else if (notification.level === 'warn') {
+      logger.warn(tag, fullMessage, notification);
+    } else if (notification.level === 'success') {
+      logger.success(tag, fullMessage, notification);
+    } else {
+      logger.info(tag, fullMessage, notification);
+    }
+
+    this._notificationListeners.forEach(fn => {
+      try { fn(notification); } catch (_) {}
+    });
+  }
+
+  getRecentNotifications(sinceMs = 5000) {
+    const cutoff = Date.now() - sinceMs;
+    return this.recentNotifications.filter(n => n.timestamp >= cutoff);
+  }
+
+  consumeRecentErrors(sinceMs = 3000) {
+    const cutoff = Date.now() - sinceMs;
+    const errors = this.recentNotifications.filter(
+      n => n.timestamp >= cutoff && (n.level === 'error' || n.level === 'warn') && !n.consumed
+    );
+    errors.forEach(e => { e.consumed = true; });
+    return errors;
+  }
+
+  clearActiveToasts() {
+    try {
+      const docs = this.getAllDocuments();
+      docs.forEach(doc => {
+        const toasts = doc.querySelectorAll ? doc.querySelectorAll('#toast-container .toast, .toast-container .toast, .toast') : [];
+        toasts.forEach(t => {
+          const closeBtn = t.querySelector ? t.querySelector('.toast-close-button') : null;
+          if (closeBtn && typeof closeBtn.click === 'function') {
+            closeBtn.click();
+          } else if (typeof t.remove === 'function') {
+            t.remove();
+          }
+        });
+      });
+    } catch (_) {}
+  }
+
+  onNotification(listener) {
+    if (typeof listener === 'function') {
+      this._notificationListeners.push(listener);
+    }
   }
 
   matchSectionName(text) {
@@ -364,7 +632,7 @@ class GloBusDOMAdapter {
       );
 
       inputElements.forEach((el, index) => {
-        if (el.closest('#globus-pilot-hud') || el.name === 'q' || el.type === 'hidden') return;
+        if ((typeof el.closest === 'function' && el.closest('#globus-pilot-hud')) || el.name === 'q' || el.type === 'hidden') return;
 
         const id = el.id || el.name || `input_${index}`;
         const name = el.name || el.id || `Field_${index}`;
@@ -410,7 +678,7 @@ class GloBusDOMAdapter {
       // 2. Dropdown selects
       const selectElements = doc.querySelectorAll('select:not([disabled]):not(.entry-assumptions-select)');
       selectElements.forEach((el, index) => {
-        if (el.closest('#globus-pilot-hud')) return;
+        if (typeof el.closest === 'function' && el.closest('#globus-pilot-hud')) return;
 
         const id = el.id || el.name || `select_${index}`;
         const name = el.name || el.id || `Select_${index}`;
@@ -420,15 +688,20 @@ class GloBusDOMAdapter {
         const nameLower = String(name).toLowerCase();
 
         // Strictly ignore simulation assumption dropdowns (e.g. Special Contracts "Incorporate projected outcomes into Y9 projections")
+        const hasAssumpClass = el.classList && typeof el.classList.contains === 'function' &&
+          (el.classList.contains('entry-assumptions-select') || el.classList.contains('assumptions-select'));
+
         if (lLower.includes('incorporate') || lLower.includes('projected outcome') || lLower.includes('assumption') || lLower.includes('probability of winning') ||
             nameLower.includes('incorporate') || nameLower.includes('assumption') ||
             idLower.includes('incorporate') || idLower.includes('assumption') ||
-            el.classList.contains('entry-assumptions-select') || el.classList.contains('assumptions-select')) {
+            hasAssumpClass) {
           return;
         }
 
+        if (!el.options) return;
+
         const options = Array.from(el.options).map(opt => ({
-          text: opt.textContent.trim(),
+          text: (opt.textContent || opt.value || '').trim(),
           value: opt.value,
           index: opt.index
         }));
@@ -479,15 +752,15 @@ class GloBusDOMAdapter {
    */
   findLabel(element) {
     if (element.title) return element.title.trim();
-    if (element.getAttribute('aria-label')) return element.getAttribute('aria-label').trim();
+    if (typeof element.getAttribute === 'function' && element.getAttribute('aria-label')) return element.getAttribute('aria-label').trim();
 
-    const cell = element.closest('td, th');
+    const cell = typeof element.closest === 'function' ? element.closest('td, th') : null;
     if (cell) {
-      const row = cell.closest('tr');
+      const row = typeof cell.closest === 'function' ? cell.closest('tr') : null;
       if (row) {
         const rowHeader = row.querySelector('th, td:first-child');
         const rowTitle = rowHeader && rowHeader !== cell ? rowHeader.textContent.trim().replace(/\s+/g, ' ') : '';
-        const table = row.closest('table');
+        const table = typeof row.closest === 'function' ? row.closest('table') : null;
         let colTitle = '';
         if (table) {
           const colIndex = Array.from(row.children).indexOf(cell);
@@ -503,13 +776,13 @@ class GloBusDOMAdapter {
 
     if (element.id) {
       const doc = element.ownerDocument || document;
-      const labelEl = doc.querySelector(`label[for="${element.id}"]`);
+      const labelEl = doc.querySelector ? doc.querySelector(`label[for="${element.id}"]`) : null;
       if (labelEl) return labelEl.textContent.trim().replace(/\s+/g, ' ');
     }
 
-    const parentGroup = element.closest('.form-group, .form-row, fieldset, p, div');
+    const parentGroup = typeof element.closest === 'function' ? element.closest('.form-group, .form-row, fieldset, p, div') : null;
     if (parentGroup) {
-      const labelEl = parentGroup.querySelector('label, .control-label, legend, span');
+      const labelEl = parentGroup.querySelector ? parentGroup.querySelector('label, .control-label, legend, span') : null;
       if (labelEl && labelEl !== element) return labelEl.textContent.trim().replace(/\s+/g, ' ');
     }
 
@@ -538,17 +811,18 @@ class GloBusDOMAdapter {
       candidates.push(cell.textContent);
     }
 
-    // 3. Table row context: check row directly below (standard Glo-Bus pattern for limits)
+    // 3. Table row context: check row directly below / above (standard Glo-Bus pattern for limits)
     const row = element.closest ? element.closest('tr') : null;
+    let colIndex = -1;
     if (row && row.parentElement) {
       const children = row.children ? Array.from(row.children) : [];
-      const colIndex = cell ? children.indexOf(cell) : -1;
+      colIndex = cell ? children.indexOf(cell) : -1;
       const nextRow = row.nextElementSibling;
       if (nextRow) {
         if (colIndex >= 0 && nextRow.children && nextRow.children[colIndex]) {
           candidates.push(nextRow.children[colIndex].textContent);
         }
-        if (/max|limit|allowed|ceiling/i.test(nextRow.textContent)) {
+        if (/max|limit|allowed|ceiling|space|available|between/i.test(nextRow.textContent)) {
           candidates.push(nextRow.textContent);
         }
       }
@@ -557,9 +831,23 @@ class GloBusDOMAdapter {
         if (colIndex >= 0 && prevRow.children && prevRow.children[colIndex]) {
           candidates.push(prevRow.children[colIndex].textContent);
         }
-        if (/max|limit|allowed|ceiling/i.test(prevRow.textContent)) {
+        if (/max|limit|allowed|ceiling|space|available|between/i.test(prevRow.textContent)) {
           candidates.push(prevRow.textContent);
         }
+      }
+
+      // 3b. Scan entire table columns for workstation space available / capacity limits
+      const table = row.closest ? row.closest('table') : null;
+      if (table && colIndex >= 0) {
+        const allTrs = table.querySelectorAll('tr');
+        allTrs.forEach(r => {
+          if (/space|available|capacity|limit|between/i.test(r.textContent)) {
+            if (r.children && r.children[colIndex]) {
+              candidates.push(r.children[colIndex].textContent);
+            }
+            candidates.push(r.textContent);
+          }
+        });
       }
     }
 
@@ -574,9 +862,13 @@ class GloBusDOMAdapter {
     const patterns = [
       /(?:maximum|max(?:\.|\s+allowed)?|board\s+limit|ceiling|up\s+to)[:\s]*([0-9,]+(?:\.\d+)?)/i,
       /\(\s*(?:max(?:\.|\s+allowed)?[:\s]*|0\s*to\s*)([0-9,]+(?:\.\d+)?)\s*\)/i,
+      /between\s+[0-9.]+\s+and\s+([0-9,]+(?:\.\d+)?)/i,
+      /(?:space\s+available|available\s+space|space\s+for\s+up\s+to|workstation\s+space|available\s+workstations?|available)[:\s]*([0-9,]+(?:\.\d+)?)/i,
+      /\b(?:0\s*-\s*|0\s*to\s*)([0-9,]+(?:\.\d+)?)\b/i,
       /(?:max|maximum)\s*=\s*([0-9,]+(?:\.\d+)?)/i,
-      /\b([0-9,]+(?:\.\d+)?)\s*(?:max|maximum)\b/i,
-      /range[:\s]*\[?[0-9.]+\s*-\s*([0-9,]+(?:\.\d+)?)/i
+      /\b([0-9,]+(?:\.\d+)?)\s*(?:max|maximum|available|allowed)\b/i,
+      /range[:\s]*\[?[0-9.]+\s*-\s*([0-9,]+(?:\.\d+)?)/i,
+      /^\s*([0-9,]+(?:\.\d+)?)\s*$/
     ];
 
     for (const text of candidates) {
@@ -609,6 +901,7 @@ class GloBusDOMAdapter {
     let max = 100;
     let step = 1;
     let category = 'general';
+    let isInteger = false;
 
     const safeVal = Number.isFinite(currentVal) ? currentVal : 0;
     const nearbyLimit = this.extractNearbyLimit(el);
@@ -617,7 +910,9 @@ class GloBusDOMAdapter {
       min = 0; max = 50000; step = 2500; category = 'rd';
     } else if (l.includes('price') || l.includes('retail price') || l.includes('wholesale')) {
       category = 'price';
-      if (l.includes('drone') || l.includes('uav')) {
+      const activePage = this.pageType || (this.detectPageType ? this.detectPageType() : '');
+      const isDronePrice = activePage === 'UAV_MARKETING' || l.includes('drone') || l.includes('uav');
+      if (isDronePrice) {
         min = 400; max = 3000; step = 10;
       } else {
         min = 100; max = 900; step = 5;
@@ -639,7 +934,9 @@ class GloBusDOMAdapter {
         // Total dollar donations ($000s)
         min = 0; max = nearbyLimit !== null ? nearbyLimit : 5000; step = 250;
       }
-    } else if (l.includes('advert') || l.includes('promo') || l.includes('search') || l.includes('website')) {
+    } else if (l.includes('website') || l.includes('display')) {
+      min = 0; max = 5000; step = 250; category = 'marketing';
+    } else if (l.includes('advert') || l.includes('promo') || l.includes('search')) {
       min = 0; max = Math.max(safeVal * 2.5, 12000); step = 250; category = 'marketing';
     } else if (l.includes('discount')) {
       const isSpecialContract = this.pageType === 'SPECIAL_CONTRACTS' || l.includes('special') || l.includes('contract') || l.includes('offer');
@@ -664,7 +961,13 @@ class GloBusDOMAdapter {
     } else if (l.includes('overtime')) {
       min = 0; max = 25; step = 5; category = 'compensation';
     } else if (l.includes('workstation')) {
-      min = 0; max = Math.max(safeVal * 1.5, 50); step = 1; category = 'facilities';
+      category = 'facilities';
+      isInteger = true;
+      // Plant capacity ceiling: if detected from nearby DOM text/table, respect it strictly.
+      const ceiling = nearbyLimit !== null ? nearbyLimit : ((nativeMax !== null && nativeMax > 0) ? nativeMax : Math.min(Math.max(safeVal * 1.5, 10), 25));
+      min = 0;
+      max = ceiling;
+      step = 1;
     } else if (l.includes('repurchase') || l.includes('buyback')) {
       category = 'finance';
       // In Glo-Bus, share repurchases are entered in thousands of shares (0 to Board limit)
@@ -713,11 +1016,16 @@ class GloBusDOMAdapter {
       step = span > 200 ? 50 : (span > 20 ? 5 : 1);
     }
 
+    const resolvedMin = Number.isFinite(nativeMin) ? nativeMin : min;
+    const resolvedMax = Number.isFinite(nativeMax) ? nativeMax : max;
+    const resolvedStep = Number.isFinite(nativeStep) && nativeStep > 0 ? nativeStep : step;
+
     return {
-      min: Number.isFinite(nativeMin) ? nativeMin : min,
-      max: Number.isFinite(nativeMax) ? nativeMax : max,
-      step: Number.isFinite(nativeStep) && nativeStep > 0 ? nativeStep : step,
-      category
+      min: resolvedMin,
+      max: resolvedMax,
+      step: resolvedStep,
+      category,
+      isInteger: Boolean(isInteger || (Number.isInteger(resolvedStep) && resolvedStep >= 1 && (Number.isInteger(resolvedMin) || resolvedMin === 0) && (Number.isInteger(resolvedMax) || resolvedMax === 1)))
     };
   }
 
@@ -740,24 +1048,69 @@ class GloBusDOMAdapter {
       return select.selectedIndex === targetIndex;
     } else {
       const input = item.element;
-      const formatted = typeof value === 'number'
-        ? (Number.isInteger(value) ? String(value) : value.toFixed(2))
-        : String(value);
+      let finalVal = value;
+      if (typeof value === 'number') {
+        if (item.min !== undefined && item.min !== null) finalVal = Math.max(item.min, finalVal);
+        if (item.max !== undefined && item.max !== null) finalVal = Math.min(item.max, finalVal);
+        if (item.isInteger || (Number.isInteger(item.step) && item.step >= 1)) {
+          finalVal = Math.round(finalVal);
+        }
+      }
+      const formatted = typeof finalVal === 'number'
+        ? (Number.isInteger(finalVal) || item.isInteger ? String(Math.round(finalVal)) : finalVal.toFixed(2))
+        : String(finalVal);
 
       if (input.value !== formatted) {
-        input.value = formatted;
-        if (typeof input.dispatchEvent === 'function') {
-          ['input', 'change', 'blur'].forEach(evt => input.dispatchEvent(new Event(evt, { bubbles: true })));
+        const inputLabel = item.label || item.id || item.name || 'Input';
+        this._activeInputLabel = inputLabel;
+        this._activeInputItem = item;
+        this._lastActiveInputItem = item;
+        // Re-ensure observers & alert wrappers are attached in case of DOM updates
+        this.attachToastObservers();
+        this.wrapWindowAlerts();
+
+        // Temporarily silence window.alert during input events so Glo-Bus inline form validation scripts never freeze execution,
+        // while capturing the alert text into the notification listener.
+        const win = input.ownerDocument?.defaultView || (typeof window !== 'undefined' ? window : null);
+        const origAlert = win ? win.alert : null;
+        if (win) {
+          try {
+            win.alert = (alertMsg) => {
+              const notification = {
+                id: 'alert_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                type: 'alert',
+                level: 'error',
+                title: 'Site Validation Dialog',
+                message: String(alertMsg || ''),
+                timestamp: Date.now(),
+                timeString: new Date().toLocaleTimeString(),
+                targetInput: inputLabel
+              };
+              this.recordSiteNotification(notification);
+              return true;
+            };
+          } catch (_) {}
         }
-        if (typeof input.onchange === 'function') {
-          try { input.onchange(); } catch (_) {}
-        }
-        if (typeof input.onblur === 'function') {
-          try { input.onblur(); } catch (_) {}
-        }
-        if (typeof input.dispatchEvent === 'function') {
-          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
-          input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, bubbles: true }));
+        try {
+          input.value = formatted;
+          if (typeof input.dispatchEvent === 'function') {
+            ['input', 'change', 'blur'].forEach(evt => input.dispatchEvent(new Event(evt, { bubbles: true })));
+          }
+          if (typeof input.onchange === 'function') {
+            try { input.onchange(); } catch (_) {}
+          }
+          if (typeof input.onblur === 'function') {
+            try { input.onblur(); } catch (_) {}
+          }
+          if (typeof input.dispatchEvent === 'function') {
+            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+            input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, bubbles: true }));
+          }
+        } finally {
+          if (win && origAlert) {
+            try { win.alert = origAlert; } catch (_) {}
+          }
+          this._activeInputLabel = null;
         }
       }
       return true;
@@ -806,12 +1159,13 @@ class GloBusDOMAdapter {
 
         // Poll for DOM stabilization: wait until the scoreboard text stops changing
         // (or until we hit the max wait). This handles async/debounced updates.
-        const maxWait = clickedBtn ? 900 : 1500;
+        const maxWait = clickedBtn ? 1000 : 1800;
+        const minWaitBeforeStable = clickedBtn ? 80 : 250; // enforce settling time for auto-recalculating screens like CSR
         const pollInterval = 50;
         const startTime = Date.now();
         let lastText = '';
         let stableCount = 0;
-        const requiredStableRounds = 2; // must be unchanged for 2 consecutive polls
+        const requiredStableRounds = clickedBtn ? 2 : 3;
 
         const getScoreboardRows = () => {
           if (this.cachedScoreboardRows && this.cachedScoreboardRows.length > 0 &&
@@ -876,7 +1230,7 @@ class GloBusDOMAdapter {
               lastText = currentText;
             }
 
-            if (stableCount >= requiredStableRounds || elapsed >= maxWait) {
+            if ((elapsed >= minWaitBeforeStable && stableCount >= requiredStableRounds) || elapsed >= maxWait) {
               cleanupAndResolve();
             } else {
               pollTimer = setTimeout(poll, pollInterval);
@@ -901,6 +1255,61 @@ class GloBusDOMAdapter {
     return new Promise(resolve => {
       logger.info('SAVE', 'Initiating decision save transaction...');
 
+      // Pre-Flight Decision Sanitization: Enforce Glo-Bus mutual exclusivity rules
+      try {
+        const allInputs = (typeof this.getDecisionInputs === 'function' ? this.getDecisionInputs() : null) || [];
+        if (Array.isArray(allInputs) && allInputs.length > 0) {
+          // 1. CSR Charitable Contributions Mutual Exclusivity
+          // Glo-Bus error: "Corporate Citizenship - Charitable Total cannot be set when Charitable Percentage is also set."
+          let charitableTotalInput = null;
+          let charitablePercentInput = null;
+          allInputs.forEach(i => {
+            if (!i) return;
+            const lbl = `${i.label || ''} ${i.name || ''} ${i.id || ''}`.toLowerCase();
+            if (lbl.includes('charit') || lbl.includes('contribut')) {
+              if (lbl.includes('percent') || lbl.includes('%') || lbl.includes('profit')) {
+                charitablePercentInput = i;
+              } else {
+                charitableTotalInput = i;
+              }
+            }
+          });
+          if (charitableTotalInput && charitablePercentInput) {
+            const totalVal = parseFloat(charitableTotalInput.value) || 0;
+            const percentVal = parseFloat(charitablePercentInput.value) || 0;
+            if (totalVal > 0 && percentVal > 0) {
+              logger.warn('SAVE', `Pre-Flight Sanitization: Both Charitable Total ($${totalVal}k) and Percent (${percentVal}%) are set. Zeroing Charitable Percent to prevent Glo-Bus save rejection.`);
+              this.setInputValue(charitablePercentInput, 0);
+              charitablePercentInput.value = 0;
+            }
+          }
+
+          // 2. Finance Stock Issue vs Stock Repurchase Mutual Exclusivity
+          let stockIssueInput = null;
+          let stockRepurchaseInput = null;
+          allInputs.forEach(i => {
+            if (!i) return;
+            const lbl = `${i.label || ''} ${i.name || ''} ${i.id || ''}`.toLowerCase();
+            if (lbl.includes('issue') && (lbl.includes('stock') || lbl.includes('share'))) {
+              stockIssueInput = i;
+            } else if (lbl.includes('repurchase') || lbl.includes('buyback')) {
+              stockRepurchaseInput = i;
+            }
+          });
+          if (stockIssueInput && stockRepurchaseInput) {
+            const issueVal = parseFloat(stockIssueInput.value) || 0;
+            const repVal = parseFloat(stockRepurchaseInput.value) || 0;
+            if (issueVal > 0 && repVal > 0) {
+              logger.warn('SAVE', `Pre-Flight Sanitization: Both Stock Issue (${issueVal}k) and Stock Repurchase (${repVal}k) are set. Zeroing Stock Issue.`);
+              this.setInputValue(stockIssueInput, 0);
+              stockIssueInput.value = 0;
+            }
+          }
+        }
+      } catch (err) {
+        logger.warn('SAVE', `Pre-flight sanitization warning: ${err.message}`);
+      }
+
       const isConfirmButton = (btn, initialSaveButton) => {
         if (!btn || btn === initialSaveButton) return false;
         
@@ -908,7 +1317,7 @@ class GloBusDOMAdapter {
         
         // Explicitly reject cancel / close buttons
         if (t === 'cancel' || t === 'no' || t === 'close' || t === 'abort') return false;
-        if (btn.classList && (btn.classList.contains('close') || btn.classList.contains('btn-cancel'))) return false;
+        if (btn.classList && typeof btn.classList.contains === 'function' && (btn.classList.contains('close') || btn.classList.contains('btn-cancel'))) return false;
         if (typeof btn.getAttribute === 'function' && btn.getAttribute('aria-label') === 'Close') return false;
 
         // Positive match conditions for save confirmation:
@@ -941,13 +1350,13 @@ class GloBusDOMAdapter {
 
         // 3. Check if button has a sibling/co-button that says 'cancel'
         const parentRow = btn.parentElement;
-        if (parentRow) {
+        if (parentRow && typeof parentRow.querySelectorAll === 'function') {
           const siblingButtons = Array.from(parentRow.querySelectorAll('button, a, input[type="button"]'));
           const hasCancelSibling = siblingButtons.some(sib => {
             const st = (sib.textContent || sib.value || '').trim().toLowerCase();
             return st === 'cancel';
           });
-          if (hasCancelSibling && (matchesSaveText || (btn.classList && (btn.classList.contains('btn-primary') || btn.classList.contains('btn-success'))))) {
+          if (hasCancelSibling && (matchesSaveText || (btn.classList && typeof btn.classList.contains === 'function' && (btn.classList.contains('btn-primary') || btn.classList.contains('btn-success'))))) {
             return true;
           }
         }
@@ -977,7 +1386,18 @@ class GloBusDOMAdapter {
               alert: d.defaultView.alert
             });
             d.defaultView.confirm = () => true;
-            d.defaultView.alert = () => true;
+            d.defaultView.alert = (alertMsg) => {
+              this.recordSiteNotification({
+                id: 'alert_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                type: 'alert',
+                level: 'warn',
+                title: 'Post-Save Dialog',
+                message: String(alertMsg || ''),
+                timestamp: Date.now(),
+                timeString: new Date().toLocaleTimeString()
+              });
+              return true;
+            };
           }
         } catch (_) {}
       });
@@ -1566,13 +1986,13 @@ class GloBusDOMAdapter {
     const target = snapshot || this.initialSnapshot;
     if (!target) return;
     const inputs = this.getDecisionInputs();
-    inputs.forEach(item => {
+    for (const item of inputs) {
       const saved = target[item.key] || target[item.id] || target[item.name];
       if (saved !== undefined) {
         if (item.type === 'select') {
           let idx = saved.selectedIndex;
           if (idx === undefined && saved.value !== undefined) {
-            const optIdx = item.options.findIndex(o => String(o.value) === String(saved.value));
+            const optIdx = item.options ? item.options.findIndex(o => String(o.value) === String(saved.value)) : -1;
             idx = optIdx !== -1 ? optIdx : parseInt(saved.value, 10);
           }
           if (idx !== undefined && !isNaN(idx)) {
@@ -1582,7 +2002,7 @@ class GloBusDOMAdapter {
           this.setInputValue(item, saved.value);
         }
       }
-    });
+    }
     await this.triggerCalculate();
   }
 }

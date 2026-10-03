@@ -20,7 +20,7 @@ if (!fs.existsSync(distDir)) {
 }
 
 const manifest = JSON.parse(fs.readFileSync(path.join(extDir, 'manifest.json'), 'utf8'));
-const version = manifest.version || '2.1.2';
+const version = manifest.version || '2.2.0';
 const zipName = `glo-bus-optimizer-v${version}-extension.zip`;
 const zipPath = path.join(distDir, zipName);
 
@@ -54,13 +54,15 @@ const releaseNotes = `# Glo-Bus Optimizer v${version} Release Notes
 ## Autonomous Multi-Objective Decision Optimizer & Simulation Suite
 
 ### What's New in v${version}:
-- **Dynamic Active Screen Detection**: Multi-tier detection engine reliably recognizes in-page screen transitions across active sidebar tabs, content panels, child iframes, and distinctive input fields.
-- **Instant HUD Screen Tag Refresh**: Fixed HUD screen tag lagging when closing and reopening the controller or navigating between decision tabs. Added immediate document click and focus listeners for 100ms UI synchronization.
-- **Autonomous Full Round Optimization**: Single "OPTIMIZE FULL ROUND" button autonomously traverses all 7 decision screens in canonical sequence (Product Design -> AC Marketing -> UAV Marketing -> Compensation & Facilities -> Special Contract Offers -> CSR -> Finance).
-- **Multi-Cycle Deep Convergence**: Automatically executes up to 3 iterative passes until portfolio EPS stabilizes (Delta EPS < $0.02).
-- **Single Master Baseline**: Preserves authentic Round Baseline throughout all cycles so performance deltas accurately reflect true gains over initial decisions.
-- **Cash-Defensive Solvency Policy for Special Contracts**: Solves sealed-bid regional auctions while eliminating speculative revenues from pro-forma statements, defending the $2,500k cash buffer against 12%+ emergency overdraft loans.
-- **CSR Image Rating Target**: Intelligently locks image rating to Investor Expectation target (75) to prevent wasteful overspending.
+- **Autonomous Multi-Cycle Convergence & Tournament Warm-Start**: Executes up to 3 iterative passes with simulated annealing cooling schedule (T=1.00 down to T=0.00) and Zero-Pass Strategic Archetype Tournament on Screen 1.
+- **Continuous Interior-Point Solvency Barrier**: Smooth C^1 penalty eliminates Dirac-delta cliff at $1,000k cash, while strict Finance Screen 7 gate protects against overdrafts.
+- **Unbounded Competitive Surplus & Dynamic Benchmarks**: Non-zero gradient past $7.50 EPS prevents metric saturation traps.
+- **Star-Price Decoupling & Quantum Solver**: Resolves Screen 1 combinatorial discontinuities with discrete S/Q feature bundles and downstream market price proxy.
+- **Cross-Regional Shadow Capacity & Contract Reservation**: Allocates plant capacity across 4 regions with marginal return equalization and guards against $50/unit outsourcing penalties.
+- **Master Round Solvency & Performance Gate**: Guarantees zero regression against locked Round Baseline, aborting auto-save if final EPS drops.
+- **Peak-State Decision Restoration**: Restores intermediate peaks achieved during exploratory passes with multi-objective tie-breaking.
+- **Site Notification Interception & Auto-Rollback**: Intercepts Glo-Bus toastr and native alerts, instantly reverting rejected inputs to safe baselines.
+- **28-Test Architectural & Mathematical Verification Suite**: Automated verification pipeline ensuring 100% test pass rate across all mathematical and operational guardrails.
 - **Universal Cross-Browser Distribution**:
   - \`${zipName}\`: Ready for Chrome, Edge, Brave, and Firefox unpacked/temporary add-on installation.
   - \`globus-pilot.user.js\`: Standalone userscript for Violentmonkey / Tampermonkey.

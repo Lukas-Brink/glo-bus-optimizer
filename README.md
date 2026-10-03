@@ -114,9 +114,12 @@ glo-bus-optimizer/
 │   ├── manifest.json           # Cross-browser Gecko & Chromium manifest
 │   ├── hud.js                  # In-page glassmorphic HUD controller & draggable UI
 │   ├── hud.css                 # Modern dark-glass CSS design system
-│   ├── optimizer.js            # Multi-objective Coordinate Descent & Annealing engine
+│   ├── optimizer.js            # Multi-objective Coordinate Descent, Annealing & Valley Guard
 │   ├── page-coordinator.js     # Autonomous multi-page round coordinator & convergence engine
 │   ├── dom-adapter.js          # DOM scraper, frame traverser & calculation event hooks
+│   ├── scoring-kernel.js       # Solvency barrier, valuation model, surplus & convergence monitor
+│   ├── capacity-kernel.js      # Cross-regional shadow capacity allocator & contract reservation
+│   ├── star-solver.js          # Discrete S/Q star solver & zero-pass tournament seeder
 │   ├── popup.html              # Extension toolbar popup
 │   └── icons/                  # High-resolution extension icons (16px, 32px, 48px, 128px)
 ├── userscript/                 # Browser Automation & Bookmarklet
@@ -131,9 +134,11 @@ glo-bus-optimizer/
 │   ├── strategies.py           # Pre-configured Grand Champion decision templates
 │   └── run_cli.py              # Command-line simulation runner & programmatic solver
 ├── tests/                      # Comprehensive Unit & Integration Test Suites
+│   ├── test_audit_fixes.js     # 28 architectural & mathematical verification tests
 │   ├── test_extension.js       # Node.js tests for DOM adapter, coordinator, & HUD
 │   └── test_simulator.py       # Python unit tests for model, elasticity, & solver
-├── scripts/                    # Build & Packaging Utilities
+├── scripts/                    # Build, Audit & Packaging Utilities
+│   ├── run_audit_pipeline.js   # Autonomous multi-phase audit & verification runner
 │   ├── bundle_userscript.js    # Compiles extension modules into userscript & bookmarklets
 │   └── package_release.js      # Creates production distribution zip & release bundles
 ├── docs/                       # Guides & Documentation
@@ -150,15 +155,19 @@ glo-bus-optimizer/
 
 ## Testing & Release Packaging
 
-The project includes automated test suites covering both the browser automation runtime and the offline Python mathematical engine.
+The project includes an enterprise test suite and automated verification pipeline covering mathematical kernels, DOM automation, and offline simulation:
 
 ```bash
-# Run the complete test suite (both WebExtension and Python tests)
+# Run the complete test suite (Audit Suite + WebExtension + Python Simulator)
 npm test
 
-# Run tests individually
+# Run individual verification suites
+npm run test:audit
 npm run test:extension
 npm run test:simulator
+
+# Run the complete autonomous audit pipeline
+npm run pipeline
 
 # Re-bundle the userscript and bookmarklet from source extension components
 npm run bundle

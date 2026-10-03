@@ -10,6 +10,9 @@ const userDir = path.join(root, 'userscript');
 
 const css = fs.readFileSync(path.join(extDir, 'hud.css'), 'utf8');
 const domAdapter = fs.readFileSync(path.join(extDir, 'dom-adapter.js'), 'utf8');
+const scoringKernel = fs.readFileSync(path.join(extDir, 'scoring-kernel.js'), 'utf8');
+const capacityKernel = fs.readFileSync(path.join(extDir, 'capacity-kernel.js'), 'utf8');
+const starSolver = fs.readFileSync(path.join(extDir, 'star-solver.js'), 'utf8');
 const optimizer = fs.readFileSync(path.join(extDir, 'optimizer.js'), 'utf8');
 const coordinator = fs.readFileSync(path.join(extDir, 'page-coordinator.js'), 'utf8');
 const hud = fs.readFileSync(path.join(extDir, 'hud.js'), 'utf8');
@@ -38,13 +41,18 @@ const inlineScript = `(function () {
   // 2. DOM Adapter & Logger
 ${domAdapter}
 
-  // 3. Optimizer Engine
+  // 3. Mathematical & Capacity Kernels
+${scoringKernel}
+${capacityKernel}
+${starSolver}
+
+  // 4. Optimizer Engine
 ${optimizer}
 
-  // 4. Page Coordinator
+  // 5. Page Coordinator
 ${coordinator}
 
-  // 5. HUD Controller
+  // 6. HUD Controller
 ${hud}
 })();
 `;
@@ -52,7 +60,7 @@ ${hud}
 const userScriptHeader = `// ==UserScript==
 // @name         GloBus-Pilot: Strategy & Decision Optimizer
 // @namespace    https://glo-bus.com/
-// @version      2.1.3
+// @version      2.2.0
 // @description  Autonomous multi-objective decision optimizer & simulation HUD for GLO-BUS with Live Diagnostics Console
 // @author       GloBus-Pilot AI
 // @match        *://*.glo-bus.com/*

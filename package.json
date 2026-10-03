@@ -1,12 +1,17 @@
 {
   "name": "glo-bus-optimizer",
-  "version": "2.1.3",
+  "version": "2.2.0",
   "description": "Autonomous multi-objective decision optimizer and simulation suite for GLO-BUS (Action Cameras & UAV Drones)",
   "main": "extension/optimizer.js",
   "scripts": {
-    "test": "node tests/test_extension.js && python -m unittest discover tests",
+    "test": "node tests/test_audit_fixes.js && node tests/test_extension.js && python -m unittest discover tests",
     "test:extension": "node tests/test_extension.js",
     "test:simulator": "python -m unittest discover tests",
+    "test:audit": "node tests/test_audit_fixes.js",
+    "pipeline": "node scripts/run_audit_pipeline.js --all",
+    "pipeline:phase1": "node scripts/run_audit_pipeline.js --phase 1",
+    "pipeline:phase2": "node scripts/run_audit_pipeline.js --phase 2",
+    "pipeline:phase3": "node scripts/run_audit_pipeline.js --phase 3",
     "bundle": "node scripts/bundle_userscript.js",
     "package": "node scripts/package_release.js"
   },

@@ -32,7 +32,7 @@
     }
   } catch (_) {}
 
-  // Synchronous + Asynchronous hybrid storage adapter
+  // Synchronous + Asynchronous hybrid storage adapter with extension context invalidation guard
   const storage = {
     async get() {
       try {
@@ -40,11 +40,20 @@
         if (raw) return JSON.parse(raw);
       } catch (_) {}
 
-      if (globalThis.chrome?.storage?.local) {
-        return new Promise(resolve => {
-          chrome.storage.local.get(STORAGE_KEY, res => resolve(res[STORAGE_KEY] || null));
-        });
-      }
+      try {
+        if (globalThis.chrome?.runtime?.id && globalThis.chrome?.storage?.local) {
+          return new Promise(resolve => {
+            try {
+              chrome.storage.local.get(STORAGE_KEY, res => {
+                if (chrome.runtime?.lastError) return resolve(null);
+                resolve(res ? (res[STORAGE_KEY] || null) : null);
+              });
+            } catch (_) {
+              resolve(null);
+            }
+          });
+        }
+      } catch (_) {}
       return null;
     },
 
@@ -55,11 +64,20 @@
         localStorage.setItem(STORAGE_KEY, serialized);
       } catch (_) {}
 
-      if (globalThis.chrome?.storage?.local) {
-        return new Promise(resolve => {
-          chrome.storage.local.set({ [STORAGE_KEY]: val }, () => resolve(val));
-        });
-      }
+      try {
+        if (globalThis.chrome?.runtime?.id && globalThis.chrome?.storage?.local) {
+          return new Promise(resolve => {
+            try {
+              chrome.storage.local.set({ [STORAGE_KEY]: val }, () => {
+                if (chrome.runtime?.lastError) return resolve(val);
+                resolve(val);
+              });
+            } catch (_) {
+              resolve(val);
+            }
+          });
+        }
+      } catch (_) {}
       return val;
     },
 
@@ -68,11 +86,17 @@
         sessionStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(STORAGE_KEY);
       } catch (_) {}
-      if (globalThis.chrome?.storage?.local) {
-        return new Promise(resolve => {
-          chrome.storage.local.remove(STORAGE_KEY, () => resolve());
-        });
-      }
+      try {
+        if (globalThis.chrome?.runtime?.id && globalThis.chrome?.storage?.local) {
+          return new Promise(resolve => {
+            try {
+              chrome.storage.local.remove(STORAGE_KEY, () => resolve());
+            } catch (_) {
+              resolve();
+            }
+          });
+        }
+      } catch (_) {}
     }
   };
 
@@ -104,6 +128,7 @@
   }
 
   // Canonical definition of Glo-Bus decision sections and exact sequence
+  // Causal Ordering (Fix #2): Capacity Provision (Facilities) occurs BEFORE Demand Generation (Marketing)
   const DECISION_SECTIONS = [
     {
       key: 'PRODUCT_DESIGN',
@@ -112,21 +137,21 @@
       order: 1
     },
     {
+      key: 'COMPENSATION_FACILITIES',
+      name: 'Compensation & Facilities',
+      patterns: ['compensation & facilities', 'compensation and facilities', 'workforce & facilities', 'workforce & compensation', 'compensation', 'workforce', 'assembly & facilities', 'assembly and facilities', '/wfc', '/fac', '/comp', 'facilities'],
+      order: 2
+    },
+    {
       key: 'AC_MARKETING',
       name: 'AC Camera Marketing',
       patterns: ['ac camera marketing', 'camera marketing', 'ac marketing', 'acc marketing', 'ac camera', '/acm', '/cam', 'ac-marketing', 'ac_marketing'],
-      order: 2
+      order: 3
     },
     {
       key: 'UAV_MARKETING',
       name: 'UAV Drone Marketing',
       patterns: ['uav drone marketing', 'drone marketing', 'uav marketing', 'uave drone marketing', 'uav drone', '/uavm', '/drone', '/uav', 'uav-marketing', 'uav_marketing', 'drone-marketing'],
-      order: 3
-    },
-    {
-      key: 'COMPENSATION_FACILITIES',
-      name: 'Compensation & Facilities',
-      patterns: ['compensation & facilities', 'compensation and facilities', 'workforce & facilities', 'workforce & compensation', 'compensation', 'workforce', 'assembly & facilities', 'assembly and facilities', '/wfc', '/fac', '/comp', 'facilities'],
       order: 4
     },
     {
@@ -386,6 +411,7 @@
           maxCycles: 3,
           minEpsGainThreshold: 0.02,
           roundBaselineMetrics: roundBaseline,
+          cycleStartMetrics: roundBaseline,
           cycleStartEps: startingEps,
           totalRunStartEps: startingEps,
           queue: queue.map(q => ({ key: q.key, name: q.name, order: q.order, url: q.url, selectorText: q.selectorText }))
@@ -396,6 +422,28 @@
         const currentSec = DECISION_SECTIONS.find(s => s.key === currentKey) || { name: 'Active Screen' };
         log.info('ROUND', `[1/${workflow.totalCount}] Optimizing current screen: [${currentSec.name}] [Cycle 1/${workflow.maxCycles}] (Saving deferred)...`);
         log.info('ROUND', `Scheduled route: [${[currentSec.name, ...queue.map(q => q.name)].join(' -> ')}]`);
+
+        // Zero-Pass Strategic Archetype Tournament on Screen 1 (Pillar 1: Basin Pre-Selection)
+        const StarSolver = (typeof window !== 'undefined' && window.GloBusStarSolver)
+          ? window.GloBusStarSolver
+          : (typeof require !== 'undefined' ? (global.GloBusStarSolver || require('./star-solver.js')) : null);
+
+        if (currentKey === 'PRODUCT_DESIGN' && (workflow.cycleIndex || 1) === 1 && !workflow.tournamentCompleted && StarSolver && typeof StarSolver.evaluateArchetypeTournament === 'function') {
+          log.step('TOURNAMENT', 'Executing Zero-Pass Strategic Archetype Tournament on Screen 1 to select optimal global basin...');
+          const tournamentResult = await StarSolver.evaluateArchetypeTournament(adapter, optimizer);
+          workflow.tournamentCompleted = true;
+          await storage.set(workflow);
+          if (tournamentResult && tournamentResult.key !== 'current') {
+            log.success('TOURNAMENT', `Archetype [${tournamentResult.name}] won tournament (Score: ${tournamentResult.score.toFixed(1)})! Round warm-started.`);
+          } else {
+            log.info('TOURNAMENT', `Current baseline won or maintained. Preserving inputs.`);
+          }
+        }
+
+        // Propagate simulated annealing cycle context (Pillar 3)
+        if (typeof optimizer.setCycleContext === 'function') {
+          optimizer.setCycleContext(workflow.cycleIndex || 1, workflow.maxCycles || 3);
+        }
 
         // 1. Optimize current page (saving deferred)
         await optimizer.start(false);
@@ -602,9 +650,27 @@
         if (!workflow.roundBaselineMetrics) {
           const roundBaseline = await this.establishRoundBaseline(adapter, log);
           workflow.roundBaselineMetrics = roundBaseline;
+          workflow.cycleStartMetrics = roundBaseline;
           workflow.cycleStartEps = roundBaseline?.eps || 0;
           workflow.totalRunStartEps = roundBaseline?.eps || 0;
           await storage.set(workflow);
+        }
+
+        // Zero-Pass Strategic Archetype Tournament on Screen 1 upon arrival
+        const StarSolver = (typeof window !== 'undefined' && window.GloBusStarSolver)
+          ? window.GloBusStarSolver
+          : (typeof require !== 'undefined' ? (global.GloBusStarSolver || require('./star-solver.js')) : null);
+
+        if (currentKey === 'PRODUCT_DESIGN' && (workflow.cycleIndex || 1) === 1 && !workflow.tournamentCompleted && StarSolver && typeof StarSolver.evaluateArchetypeTournament === 'function') {
+          log.step('TOURNAMENT', 'Executing Zero-Pass Strategic Archetype Tournament on Screen 1 to select optimal global basin...');
+          const tournamentResult = await StarSolver.evaluateArchetypeTournament(adapter, optimizer);
+          workflow.tournamentCompleted = true;
+          await storage.set(workflow);
+          if (tournamentResult && tournamentResult.key !== 'current') {
+            log.success('TOURNAMENT', `Archetype [${tournamentResult.name}] won tournament (Score: ${tournamentResult.score.toFixed(1)})! Round warm-started.`);
+          } else {
+            log.info('TOURNAMENT', `Current baseline won or maintained. Preserving inputs.`);
+          }
         }
 
         const isFinalPage = !workflow.queue || workflow.queue.length === 0;
@@ -612,6 +678,11 @@
         const cycleNum = workflow.cycleIndex || 1;
         const maxCycles = workflow.maxCycles || 3;
         log.info('RESUME', `Arrived on [${currentSec.name}] (${workflow.visitedKeys.length} of ${workflow.totalCount}) [Cycle ${cycleNum}/${maxCycles}]. Resuming optimization (Saving deferred)...`);
+
+        // Propagate simulated annealing cycle context (Pillar 3)
+        if (typeof optimizer.setCycleContext === 'function') {
+          optimizer.setCycleContext(cycleNum, maxCycles);
+        }
 
         // Optimize current screen (saving always deferred during cycle execution)
         await optimizer.start(false);
@@ -642,22 +713,46 @@
       const currentEps = currentMetrics?.eps || 0;
       const cycleStartEps = workflow.cycleStartEps || 0;
       const totalRunStartEps = workflow.roundBaselineMetrics?.eps || workflow.totalRunStartEps || cycleStartEps;
-
       const cycleGain = currentEps - cycleStartEps;
       const totalGain = currentEps - totalRunStartEps;
       const maxCycles = workflow.maxCycles || 3;
-      const minGainThreshold = workflow.minEpsGainThreshold || 0.02;
+      const minEpsGainThreshold = workflow.minEpsGainThreshold || 0.02;
+      const minGainThreshold = minEpsGainThreshold;
 
-      const hasSignificantGain = cycleGain >= minGainThreshold;
+      const currentScore = optimizer?.bestScore || (optimizer && typeof optimizer.evaluateScore === 'function' ? optimizer.evaluateScore(currentMetrics) : 0);
+      const cycleStartScore = workflow.cycleStartScore || currentScore;
+      const scoreGain = currentScore - cycleStartScore;
+
+      const ScoringKernel = (typeof window !== 'undefined' && window.GloBusScoringKernel)
+        ? window.GloBusScoringKernel
+        : (typeof require !== 'undefined' ? (global.GloBusScoringKernel || require('./scoring-kernel.js')) : null);
+
+      let convergenceResult = null;
+      if (ScoringKernel && ScoringKernel.ConvergenceMonitor) {
+        convergenceResult = ScoringKernel.ConvergenceMonitor.evaluateConvergence(
+          currentMetrics,
+          workflow.cycleStartMetrics || { eps: cycleStartEps, imageRating: currentMetrics?.imageRating, creditRating: currentMetrics?.creditRating },
+          currentScore,
+          cycleStartScore,
+          { minEpsGainThreshold, minScoreGainThreshold: 0.50 }
+        );
+      }
+
+      const hasSignificantGain = convergenceResult
+        ? convergenceResult.hasSignificantGain
+        : ((cycleGain >= minGainThreshold) || (scoreGain >= 0.50));
       const canContinue = ((workflow.cycleIndex || 1) < maxCycles) && hasSignificantGain;
 
       if (canContinue) {
         const nextCycle = (workflow.cycleIndex || 1) + 1;
-        log.step('CONVERGE', `Cycle ${workflow.cycleIndex} complete: EPS rose from $${cycleStartEps.toFixed(2)} -> $${currentEps.toFixed(2)} (+Δ $${cycleGain.toFixed(2)}). Gained ≥ +$${minGainThreshold.toFixed(2)} threshold. Looping back to [Product Design] for Cycle ${nextCycle} of ${maxCycles} (Deep Convergence)...`);
+        const progressDetail = convergenceResult?.reason || `EPS +$${cycleGain.toFixed(2)} | Score +${scoreGain.toFixed(2)} pts`;
+        log.step('CONVERGE', `Cycle ${workflow.cycleIndex} complete: ${progressDetail}. Looping back to [Product Design] for Cycle ${nextCycle} of ${maxCycles} (Deep Convergence)...`);
 
         const allLinks = this.discoverDecisionLinks();
         workflow.cycleIndex = nextCycle;
+        workflow.cycleStartMetrics = { ...currentMetrics };
         workflow.cycleStartEps = currentEps;
+        workflow.cycleStartScore = currentScore;
         workflow.visitedKeys = [];
         workflow.pendingNavigation = false;
         workflow.totalCount = allLinks.length;
@@ -666,10 +761,24 @@
         await storage.set(workflow);
         await this.navigateNext(workflow);
       } else {
+        const cycleGainStr = cycleGain >= 0 ? `+$${cycleGain.toFixed(2)}` : `-$${Math.abs(cycleGain).toFixed(2)}`;
+        const scoreGainStr = `${scoreGain >= 0 ? '+' : ''}${scoreGain.toFixed(2)}`;
+        const totalGainStr = totalGain >= 0 ? `+$${totalGain.toFixed(2)}` : `-$${Math.abs(totalGain).toFixed(2)}`;
+
         if (!hasSignificantGain) {
-          log.success('CONVERGE', `Mathematical convergence achieved! (Cycle ${workflow.cycleIndex} gain: +$${Math.max(0, cycleGain).toFixed(2)} EPS < $${minGainThreshold.toFixed(2)} threshold). EPS stabilized at $${currentEps.toFixed(2)} (Total round gain: +$${Math.max(0, totalGain).toFixed(2)}).`);
+          log.success('CONVERGE', `Mathematical convergence achieved! (Cycle ${workflow.cycleIndex} gain: ${cycleGainStr} EPS, ${scoreGainStr} Score pts). Final EPS: $${currentEps.toFixed(2)} (Total round gain: ${totalGainStr}).`);
         } else {
-          log.success('CONVERGE', `Completed maximum ${maxCycles} optimization cycles! Peak EPS: $${currentEps.toFixed(2)} (Total round gain: +$${Math.max(0, totalGain).toFixed(2)}).`);
+          log.success('CONVERGE', `Completed maximum ${maxCycles} optimization cycles! Peak EPS: $${currentEps.toFixed(2)} (Total round gain: ${totalGainStr}).`);
+        }
+
+        // Master Round Solvency & Performance Gate:
+        // Strictly prevent auto-saving if the entire round suffered a net degradation vs Round Baseline!
+        const baseRoundEps = workflow.roundBaselineMetrics?.eps || workflow.totalRunStartEps || 0;
+        const isDegradedVsRoundBaseline = (baseRoundEps > 0 && currentEps < baseRoundEps - 0.01);
+        if (isDegradedVsRoundBaseline) {
+          log.error('SAFETY', `Master Round Safety Gate: Final EPS ($${currentEps.toFixed(2)}) degraded below locked Round Baseline ($${baseRoundEps.toFixed(2)}). Auto-save aborted to protect live standings!`);
+          await this.stop(false);
+          return;
         }
 
         // Final Auto-Save on server

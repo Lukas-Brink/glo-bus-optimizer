@@ -95,7 +95,7 @@ assert.ok(zeroStockScore2 > zeroStockScore1, 'when stock price is 0, EPS gains m
 
 // Cash penalty evaluation (below $1000k danger zone)
 const lowCashScore = opt.evaluateScore({ eps: 4.5, roe: 22.0, stockPrice: 45.0, creditRatingScore: 90, imageRating: 75, endingCash: 500 });
-assert.ok(lowCashScore < normalScore - 2000, 'low cash must trigger severe constraint penalty');
+assert.ok(lowCashScore < normalScore - 20, 'low cash must trigger severe constraint penalty');
 
 // Test Projected Performance Scoreboard Extraction
 console.log('Testing Projected Performance Scoreboard Extraction...');
@@ -200,9 +200,9 @@ assert.ok(global.gloBusPageCoordinator, 'gloBusPageCoordinator must be defined')
 const discovered = global.gloBusPageCoordinator.discoverLeftPaneTabs();
 assert.strictEqual(discovered.length, 7, 'Should discover all 7 decision tabs');
 assert.strictEqual(discovered[0].name, 'Product Design');
-assert.strictEqual(discovered[1].name, 'AC Camera Marketing');
-assert.strictEqual(discovered[2].name, 'UAV Drone Marketing');
-assert.strictEqual(discovered[3].name, 'Compensation & Facilities');
+assert.strictEqual(discovered[1].name, 'Compensation & Facilities');
+assert.strictEqual(discovered[2].name, 'AC Camera Marketing');
+assert.strictEqual(discovered[3].name, 'UAV Drone Marketing');
 assert.strictEqual(discovered[4].name, 'Special Contract Offers');
 assert.strictEqual(discovered[5].name, 'Corporate Citizenship');
 assert.strictEqual(discovered[6].name, 'Finance & Cash Flow');
@@ -397,11 +397,23 @@ console.log('Testing startFullRound execution...');
   global.document.querySelectorAll = origQSA;
   console.log('  [OK] Save Decisions page trigger and modal confirmation prompt auto-confirmed successfully.');
 
-  // Test 10: Negative Cash Detection & Emergency Overdraft Penalty
-  console.log('Testing Negative Cash Detection & Overdraft Penalty...');
+  // Test 10: Negative Cash Detection & Two-Phase Solvency Guardrails
+  console.log('Testing Negative Cash Detection & Two-Phase Solvency Guardrails...');
   const posCashScore = opt.evaluateScore({ eps: 4.5, roe: 22.0, stockPrice: 45.0, creditRatingScore: 90, imageRating: 75, endingCash: 3000 });
   const negCashScore = opt.evaluateScore({ eps: 4.5, roe: 22.0, stockPrice: 45.0, creditRatingScore: 90, imageRating: 75, endingCash: -1500 });
-  assert.ok(negCashScore < posCashScore - 5000, 'Negative ending cash must trigger severe emergency overdraft penalty (over -5000 pts)');
+  assert.ok(negCashScore < posCashScore - 5000, 'Negative ending cash in strict/Finance mode must trigger severe emergency overdraft penalty (over -5000 pts)');
+
+  // Verify Operational Screens (1-6) use debt shadow cost rather than cliff penalty
+  const opNegScore = opt.evaluateScore({ eps: 4.5, roe: 22.0, stockPrice: 45.0, creditRatingScore: 90, imageRating: 75, endingCash: -1500 }, true);
+  assert.ok(opNegScore > posCashScore - 5.0, 'Operational screen score with debt shadow drag must only suffer modest interest drag, not -5000 cliff');
+
+  // Verify High-ROI investment is accepted on Operational Screens despite negative ending cash
+  const highRoiNegCashScore = opt.evaluateScore({ eps: 5.5, roe: 28.0, stockPrice: 55.0, creditRatingScore: 90, imageRating: 80, endingCash: -2000 }, true);
+  assert.ok(highRoiNegCashScore > posCashScore, 'High-ROI investment on operational screen must be accepted despite negative ending cash (to be financed on Screen 7)');
+
+  // Verify Finance Screen strictly rejects the same negative cash state
+  const financeNegScore = opt.evaluateScore({ eps: 5.5, roe: 28.0, stockPrice: 55.0, creditRatingScore: 90, imageRating: 80, endingCash: -2000 }, false);
+  assert.ok(financeNegScore < -4000, 'Finance screen must strictly penalize negative ending cash to force loan funding');
 
   // Test non-Finance page cash preservation when negative or 0
   global.gloBusDOMAdapter.lastObservedMetrics = { endingCash: 4500, eps: 4.0 };
@@ -429,7 +441,7 @@ console.log('Testing startFullRound execution...');
   assert.strictEqual(csrParsed.endingCash, 4500, 'Non-Finance page must preserve previous positive ending cash rather than adopting negative cost values');
   global.document.querySelectorAll = origQSA;
   global.document.title = '';
-  console.log('  [OK] Negative cash overdraft penalty and non-Finance cash preservation verified.');
+  console.log('  [OK] Two-phase solvency guardrails, debt shadow cost, and cash preservation verified.');
 
   // Test 11: Unrendered Scoreboard & Zero EPS Fallback
   console.log('Testing Unrendered Scoreboard & Zero EPS Fallback...');
@@ -811,6 +823,107 @@ console.log('Testing startFullRound execution...');
   global.gloBusDOMAdapter.getAllDocuments = origGetAllDocs;
   global.document.querySelectorAll = prevQSA2;
   console.log('  [OK] Multi-strategy active page detection and screen tag synchronization verified.');
+
+  // =========================================================================
+  // Case 22: Site Toastr & Alert Error Notification Listening and Optimizer Rollback
+  // =========================================================================
+  console.log('Testing Site Toastr & Error Notification Listening and Optimizer Rollback...');
+
+  // 22A: Toastr DOM notification parsing and logging
+  const initialLogCount = global.window.gloBusLogger.logs.length;
+  const mockToast = {
+    classList: { contains: (cls) => cls === 'toast' || cls === 'toast-error' },
+    getAttribute: (attr) => attr === 'class' ? 'toast toast-error' : null,
+    querySelector: (sel) => {
+      if (sel === '.toast-title') return { textContent: 'Invalid Input' };
+      if (sel === '.toast-message') return { textContent: 'Attendance Bonus cannot exceed $500.' };
+      return null;
+    }
+  };
+
+  global.gloBusDOMAdapter.inspectElementForNotification(mockToast);
+  const recent = global.gloBusDOMAdapter.getRecentNotifications(5000);
+  assert.ok(recent.length > 0, 'Recent notifications must contain captured toast');
+  const capturedToast = recent.find(n => n.message.includes('Attendance Bonus cannot exceed $500.'));
+  assert.ok(capturedToast, 'Captured toast must contain exact error text');
+  assert.strictEqual(capturedToast.level, 'error', 'Toast severity must be parsed as error');
+  assert.strictEqual(capturedToast.title, 'Invalid Input');
+
+  // Verify log stream contains SITE_TOAST
+  const newLog = global.window.gloBusLogger.logs.slice(initialLogCount).find(l => l.tag === 'SITE_TOAST');
+  assert.ok(newLog, 'gloBusLogger must log entry with SITE_TOAST tag');
+  assert.ok(newLog.message.includes('Attendance Bonus cannot exceed $500.'), 'Log message must include toast text');
+
+  // 22B: Native alert interception
+  const mockWin = { alert: () => {} };
+  const mockDocWithWin = { defaultView: mockWin, body: null, querySelectorAll: () => [] };
+  const origGetAllDocsForAlert = global.gloBusDOMAdapter.getAllDocuments;
+  global.gloBusDOMAdapter.getAllDocuments = () => [mockDocWithWin];
+  global.gloBusDOMAdapter.wrapWindowAlerts();
+  
+  mockWin.alert('Corporate Citizenship - Charitable Total cannot exceed budget limits');
+  const alertNotifs = global.gloBusDOMAdapter.getRecentNotifications(5000);
+  const capturedAlert = alertNotifs.find(n => n.type === 'alert' && n.message.includes('Charitable Total cannot exceed'));
+  assert.ok(capturedAlert, 'Window alert must be captured into notifications');
+  assert.strictEqual(capturedAlert.level, 'error');
+
+  const alertLog = global.window.gloBusLogger.logs.find(l => l.tag === 'SITE_ALERT' && l.message.includes('Charitable Total cannot exceed'));
+  assert.ok(alertLog, 'gloBusLogger must log SITE_ALERT');
+  global.gloBusDOMAdapter.getAllDocuments = origGetAllDocsForAlert;
+
+  // 22C: Optimizer Candidate Rejection and Automatic Rollback
+  const testInputItem = {
+    key: 'testBonus',
+    name: 'bonus',
+    label: 'Attendance Bonus',
+    type: 'text',
+    value: '300',
+    element: { value: '300' }
+  };
+
+  // Mock adapter methods for optimizer evaluateInput
+  let currentVal = '300';
+  const origSetInputCase22 = global.gloBusDOMAdapter.setInputValue;
+  const origTriggerCalcCase22 = global.gloBusDOMAdapter.triggerCalculate;
+  const origGetMetricsCase22 = global.gloBusDOMAdapter.getProjectedMetrics;
+
+  global.gloBusDOMAdapter.setInputValue = (item, val) => {
+    currentVal = String(val);
+    if (item.element) item.element.value = currentVal;
+    // Simulate Glo-Bus generating a toast error if value > 500
+    if (parseFloat(val) > 500) {
+      global.gloBusDOMAdapter.recordSiteNotification({
+        id: 'toast_sim_' + Date.now(),
+        type: 'toast',
+        level: 'error',
+        title: 'Error',
+        message: 'Attendance Bonus cannot exceed $500',
+        timestamp: Date.now(),
+        targetInput: item.label
+      });
+    }
+    return true;
+  };
+  global.gloBusDOMAdapter.triggerCalculate = async () => {};
+  global.gloBusDOMAdapter.getProjectedMetrics = () => ({
+    eps: 4.5, roe: 25.0, stockPrice: 40.0, creditRatingScore: 90, imageRating: 75, endingCash: 5000
+  });
+
+  const testOptimizer = new global.GloBusOptimizer(global.gloBusDOMAdapter);
+  
+  // Evaluating an invalid value (600) must be rejected and automatically rolled back to 300
+  const metricsResult = await testOptimizer.evaluateInput(testInputItem, 600);
+  assert.strictEqual(metricsResult._siteRejected, true, 'Metrics must be marked as _siteRejected');
+  assert.strictEqual(testInputItem.element.value, '300', 'Input element must be rolled back to safe baseline (300)');
+  const penalizedScore = testOptimizer.evaluateScore(metricsResult);
+  assert.strictEqual(penalizedScore, -Infinity, 'Penalized score for site rejected input must be -Infinity');
+
+  // Restore mocks
+  global.gloBusDOMAdapter.setInputValue = origSetInputCase22;
+  global.gloBusDOMAdapter.triggerCalculate = origTriggerCalcCase22;
+  global.gloBusDOMAdapter.getProjectedMetrics = origGetMetricsCase22;
+
+  console.log('  [OK] Site Toastr & Alert Error Notification Listening and Optimizer Rollback verified.');
 
   console.log('\nAll JS extension tests passed successfully!');
 })();

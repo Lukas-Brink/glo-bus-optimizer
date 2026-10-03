@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GloBus-Pilot: Strategy & Decision Optimizer",
-  "version": "2.1.3",
+  "version": "2.2.0",
   "description": "Autonomous multi-objective decision optimizer and simulation HUD for GLO-BUS (Action Cameras & UAV Drones).",
   "icons": {
     "16": "icons/icon-16.png",
@@ -26,6 +26,9 @@
       ],
       "js": [
         "dom-adapter.js",
+        "scoring-kernel.js",
+        "capacity-kernel.js",
+        "star-solver.js",
         "optimizer.js",
         "page-coordinator.js",
         "hud.js"
