@@ -164,7 +164,13 @@
       if (metrics.imageRating >= targetImage) {
         const pctOver = (metrics.imageRating - targetImage) / targetImage;
         const bonusPct = Math.min(0.20, pctOver * 0.5);
-        scoreImage_IE = 20.0 * (1 + bonusPct);
+        // Operational Image Slack Buffer (Audit Fix #1):
+        // On operational screens (1-4), if Image Rating meets or exceeds Investor Expectation (>= targetImage, e.g. 75),
+        // award the full +20% expectation bonus so coordinate descent doesn't reject EPS-positive moves due to
+        // integer rounding jitter (e.g. 77 -> 76). Non-operational screens (CSR, Finance, Finalization) evaluate
+        // the precise bonusPct to maintain authentic game scoring.
+        const effectiveBonus = (isOperational && metrics.imageRating >= targetImage) ? 0.20 : bonusPct;
+        scoreImage_IE = 20.0 * (1 + effectiveBonus);
       } else {
         scoreImage_IE = Math.max(0, 20.0 * (metrics.imageRating / targetImage));
       }
@@ -202,7 +208,13 @@
 
       const scoreEPS_BII = 20.0 * Math.min(1.0, metrics.eps / benchmarkEPS);
       const scoreROE_BII = 20.0 * Math.min(1.0, metrics.roe / benchmarkROE);
-      const scoreImage_BII = 20.0 * Math.min(1.0, metrics.imageRating / benchmarkImage);
+      // Operational Image Slack Buffer (Audit Fix #1):
+      // On operational screens (1-4), if Image Rating meets or exceeds Investor Expectation (>= targetImage, e.g. 75),
+      // do not apply the integer BII reduction cliff. This allows coordinate descent to accept EPS-positive moves
+      // within a 1-2 pt image rounding band. Screen 6 (CSR) runs in non-operational mode to re-anchor Image >= Baseline.
+      const scoreImage_BII = (isOperational && metrics.imageRating >= targetImage)
+        ? 20.0
+        : 20.0 * Math.min(1.0, metrics.imageRating / benchmarkImage);
 
       const biiCreditMap = {
         'A+': 20.0, 'A': 19.0, 'A-': 18.0,
@@ -222,15 +234,20 @@
       let compositeScore = (0.50 * totalIE) + (0.50 * totalBII);
 
       // =========================================================================
-      // UNBOUNDED COMPETITIVE SURPLUS REGULARIZER (Fix #3)
+      // UNBOUNDED COMPETITIVE SURPLUS REGULARIZER (Fix #3, Audit Fix #5)
       // Guarantees non-zero gradient (nabla f != 0) above arbitrary saturation ceilings
+      // across EPS, Cash, ROE, and Stock Price.
       // =========================================================================
-      const epsRegularizer = 0.05 * metrics.eps;
+      const epsRegularizer = 0.20 * metrics.eps;
       // Cash regularizer gives slight tie-breaking preference to cash solvency,
       // but is strictly capped at $10,000k to prevent toxic debt borrowing accumulation.
       const effectiveCash = Math.min(10000, Math.max(0, metrics.endingCash || 0));
       const cashRegularizer = 0.005 * Math.log(1.0 + effectiveCash);
-      compositeScore += epsRegularizer + cashRegularizer;
+      // ROE regularizer ensures excess cash deployment (dividends/buybacks) produces positive gradient
+      const roeRegularizer = 0.02 * (metrics.roe || 0);
+      // Stock price regularizer ensures equity/valuation increases produce positive gradient
+      const stockRegularizer = 0.002 * (effectiveStockPrice || 0);
+      compositeScore += epsRegularizer + cashRegularizer + roeRegularizer + stockRegularizer;
 
       // =========================================================================
       // CONTINUOUS FINANCIAL SOLVENCY & CASH BARRIER (Fix #7)

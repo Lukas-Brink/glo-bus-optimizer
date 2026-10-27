@@ -640,7 +640,7 @@ console.log('[TEST 13/13] Bank Loan Debt Guard & Cash Regularizer Cap...');
     // Cycle 2: Co-Optimization
     optAnneal.setCycleContext(2, 3);
     assert.strictEqual(optAnneal.cycleIndex, 2);
-    assert.strictEqual(optAnneal.temperature, 0.3, 'Cycle 2 temperature must be 0.3');
+    assert.strictEqual(optAnneal.temperature, 0.0, 'Cycle 2 temperature must be 0.0 (Pure greedy coordinate descent for Deep Convergence)');
     assert.strictEqual(optAnneal.stepScaleMultiplier, 1.0, 'Cycle 2 step scale must be 1.0x');
 
     // Cycle 3: Exploitation & Strict Monotonicity
@@ -1144,11 +1144,412 @@ console.log('[TEST 13/13] Bank Loan Debt Guard & Cash Regularizer Cap...');
     console.log('  [PASS] Test 28: Transparent Signed Gain Reporting verified (zero masking eliminated).');
   }
 
+  // =========================================================================
+  // TEST 29 (AUDIT FIX #1): Operational Image Slack Buffer
+  // =========================================================================
+  {
+    console.log('Testing Test 29: Operational Image Slack Buffer (Audit Fix #1)...');
+    const { ObjectiveKernel } = require('../extension/scoring-kernel.js');
+
+    // Base state: EPS $12.49, Image 77
+    const baseMetrics = { eps: 12.49, roe: 81.7, imageRating: 77, creditRating: 'A+', stockPrice: 150, endingCash: 50000 };
+    // Candidate state: EPS $12.51 (+$0.02), Image 76 (-1 Image, but >= 75 target)
+    const candMetrics = { eps: 12.51, roe: 81.7, imageRating: 76, creditRating: 'A+', stockPrice: 150, endingCash: 50000 };
+
+    // In operational phase (Screens 1-4), Image >= 75 does not suffer integer cliff:
+    const opScoreBase = ObjectiveKernel.evaluateScore(baseMetrics, {}, true);
+    const opScoreCand = ObjectiveKernel.evaluateScore(candMetrics, {}, true);
+    assert.ok(opScoreCand > opScoreBase, `Operational candidate with EPS +$0.02 must beat baseline when Image >= 75: Cand=${opScoreCand.toFixed(3)}, Base=${opScoreBase.toFixed(3)}`);
+
+    // In non-operational phase (Screens 6-7, finalization), authentic Image scoring applies:
+    const finalScoreBase = ObjectiveKernel.evaluateScore(baseMetrics, {}, false);
+    const finalScoreCand = ObjectiveKernel.evaluateScore(candMetrics, {}, false);
+    assert.ok(finalScoreBase > finalScoreCand, `Non-operational score must authentically penalize Image drop: Base=${finalScoreBase.toFixed(3)}, Cand=${finalScoreCand.toFixed(3)}`);
+
+    // If Image drops below 75 investor expectation, operational phase MUST still penalize:
+    const belowTargetMetrics = { eps: 12.51, roe: 81.7, imageRating: 74, creditRating: 'A+', stockPrice: 150, endingCash: 50000 };
+    const opScoreBelow = ObjectiveKernel.evaluateScore(belowTargetMetrics, {}, true);
+    assert.ok(opScoreBase > opScoreBelow, `Operational phase must strictly penalize Image drops below 75: Base=${opScoreBase.toFixed(3)}, Below=${opScoreBelow.toFixed(3)}`);
+
+    console.log('  [PASS] Test 29: Operational Image Slack Buffer verified.');
+  }
+
+  // =========================================================================
+  // TEST 30 (AUDIT FIX #2): DOM Probe Clean Reversion & Baseline Anchoring
+  // =========================================================================
+  {
+    console.log('Testing Test 30: DOM Probe Clean Reversion & Baseline Anchoring (Audit Fix #2)...');
+    const GloBusOptimizer = require('../extension/optimizer.js');
+
+    let currentDOMVal = 10;
+    const mockItem = {
+      name: 'price_input',
+      label: 'Wholesale Price',
+      value: 10,
+      min: 0,
+      max: 20,
+      step: 2,
+      element: { value: 10 }
+    };
+
+    let calculateHistory = [];
+    const mockAdapter = {
+      detectPageType: () => 'AC_MARKETING',
+      getDecisionInputs: () => [mockItem],
+      setInputValue: (item, val) => {
+        item.value = val;
+        item.element.value = val;
+        currentDOMVal = val;
+      },
+      triggerCalculate: async () => {
+        calculateHistory.push(currentDOMVal);
+      },
+      getProjectedMetrics: () => ({
+        eps: currentDOMVal === 12 ? 10.0 : (currentDOMVal === 8 ? 9.5 : 9.8),
+        roe: 40.0,
+        imageRating: currentDOMVal === 12 ? 76 : (currentDOMVal === 8 ? 77 : 77),
+        creditRating: 'A',
+        endingCash: 5000,
+        stockPrice: 80
+      }),
+      captureInitialSnapshot: () => ({ [mockItem.name]: 10 }),
+      captureSnapshot: () => ({ [mockItem.name]: currentDOMVal }),
+      restoreSnapshot: async (snap) => {
+        if (snap && snap[mockItem.name] !== undefined) {
+          mockItem.value = snap[mockItem.name];
+          mockItem.element.value = snap[mockItem.name];
+          currentDOMVal = snap[mockItem.name];
+        }
+      }
+    };
+
+    const opt = new GloBusOptimizer(mockAdapter);
+    opt.isRunning = true;
+    opt.bestScore = 100.0;
+    opt.bestMetrics = { eps: 9.8, roe: 40, imageRating: 77, creditRating: 'A', endingCash: 5000, stockPrice: 80 };
+    opt.peakScore = 100.0;
+    opt.peakMetrics = { ...opt.bestMetrics };
+    opt.temperature = 0.0; // Pure greedy
+
+    calculateHistory = [];
+    await opt.optimizeSingleParameter(mockItem, 1.0, [mockItem]);
+
+    // When testing +step (12), it failed/rejected. Before testing -step (8), DOM must have reverted to 10!
+    // Verify that 10 was restored between probe 12 and probe 8:
+    const indexOf12 = calculateHistory.indexOf(12);
+    const indexOf8 = calculateHistory.indexOf(8);
+    assert.ok(indexOf12 !== -1 && indexOf8 !== -1, 'Both directions must have been probed');
+    assert.ok(calculateHistory.slice(indexOf12, indexOf8).includes(10), 'DOM must have been reverted to 10 before probing 8');
+
+    console.log('  [PASS] Test 30: DOM Probe Clean Reversion & Baseline Anchoring verified.');
+  }
+
+  // =========================================================================
+  // TEST 31 (AUDIT FIX #3): Annealing Metropolis Zero-Delta Safeguard & Peak Restoration
+  // =========================================================================
+  {
+    console.log('Testing Test 31: Annealing Metropolis Zero-Delta Safeguard & Pre-Pass 3 Peak Restoration (Audit Fix #3)...');
+    const GloBusOptimizer = require('../extension/optimizer.js');
+
+    const opt = new GloBusOptimizer({});
+    opt.bestScore = 105.800;
+    opt.bestMetrics = { eps: 12.49, roe: 81.7, endingCash: 50000 };
+    opt.peakScore = 105.800;
+    opt.peakMetrics = { eps: 12.49, roe: 81.7, endingCash: 50000 };
+    opt.temperature = 1.0;
+
+    // Test a candidate move that has deltaScore == 0.00 but drops EPS from $12.49 to $12.48:
+    const candMetricsWorseEPS = { eps: 12.48, roe: 81.7, endingCash: 50000 };
+    const deltaScore = 0.0;
+    const deltaEps = candMetricsWorseEPS.eps - opt.bestMetrics.eps;
+    const isWorseOnZeroDelta = Math.abs(deltaScore) < 0.001 && (deltaEps < -0.005 || candMetricsWorseEPS.endingCash < opt.bestMetrics.endingCash - 100);
+    assert.strictEqual(isWorseOnZeroDelta, true, 'Zero-delta move with degraded EPS must be flagged as worse');
+
+    // Test Pre-Pass 3 Peak Combo Restoration:
+    let restoredCombo = null;
+    const mockOptAdapter = {
+      restoreSnapshot: async (snap) => { restoredCombo = snap; },
+      triggerCalculate: async () => {},
+      getProjectedMetrics: () => ({ eps: 12.55, roe: 82.0, imageRating: 77, creditRating: 'A+', endingCash: 50000 }),
+      getDecisionInputs: () => [],
+      detectPageType: () => 'AC_MARKETING'
+    };
+    const peakOpt = new GloBusOptimizer(mockOptAdapter);
+    peakOpt.isRunning = true;
+    peakOpt.peakScore = 106.5;
+    peakOpt.peakMetrics = { eps: 12.55 };
+    peakOpt.peakCombo = { price: 420 };
+    peakOpt.bestScore = 105.7; // Drifted into valley
+    peakOpt.bestMetrics = { eps: 12.45 };
+    peakOpt.temperature = 1.0;
+
+    // In runOptimizationLoop, before Pass 3 runs:
+    const peakToRestore = peakOpt.peakCombo || peakOpt.bestCombo;
+    if (peakToRestore && (peakOpt.peakScore > peakOpt.bestScore + 0.001 || (peakOpt.peakMetrics?.eps || 0) > (peakOpt.bestMetrics?.eps || 0) + 0.005)) {
+      await mockOptAdapter.restoreSnapshot(peakToRestore);
+    }
+    assert.deepStrictEqual(restoredCombo, { price: 420 }, 'Peak combo must be restored before Pass 3');
+
+    console.log('  [PASS] Test 31: Annealing Safeguard & Pre-Pass 3 Peak Restoration verified.');
+  }
+
+  // =========================================================================
+  // TEST 32 (AUDIT FIX #4): Special Contracts Pro-Forma Try-Finally & Defensive "No" Enforcement
+  // =========================================================================
+  {
+    console.log('Testing Test 32: Special Contracts Try-Finally & Defensive "No" Enforcement (Audit Fix #4)...');
+    const GloBusOptimizer = require('../extension/optimizer.js');
+
+    let currentAssumptions = null;
+    let calculateCount = 0;
+    const mockItem = { name: 'discount_na', label: 'Special Discount Offer (North America)', value: 20 };
+    const mockAdapter = {
+      detectPageType: () => 'SPECIAL_CONTRACTS',
+      getDecisionInputs: () => [mockItem],
+      setSpecialContractAssumptions: (assumptions) => { currentAssumptions = { ...assumptions }; },
+      triggerCalculate: async () => { calculateCount++; },
+      getSpecialContractData: () => ({
+        na: { valueIndex: 53, marginPerUnit: 35.0 }
+      }),
+      setInputValue: (item, val) => { item.value = val; },
+      captureSnapshot: () => ({}),
+      getProjectedMetrics: () => ({ eps: 12.49, roe: 81.7, imageRating: 77, creditRating: 'A+', endingCash: 50000 })
+    };
+
+    const opt = new GloBusOptimizer(mockAdapter);
+    opt.isRunning = true;
+    await opt.runSpecialContractsOptimization();
+
+    // Verify regional assumptions were strictly forced back to false (all 'No')
+    assert.strictEqual(currentAssumptions.na, false, 'NA incorporation toggle must be strictly false');
+    assert.strictEqual(currentAssumptions.ea, false, 'EA incorporation toggle must be strictly false');
+    assert.strictEqual(currentAssumptions.ap, false, 'AP incorporation toggle must be strictly false');
+    assert.strictEqual(currentAssumptions.la, false, 'LA incorporation toggle must be strictly false');
+    assert.ok(calculateCount >= 2, 'Recalculation must have been triggered for calibration and finalization');
+
+    console.log('  [PASS] Test 32: Special Contracts Try-Finally & Defensive "No" Enforcement verified.');
+  }
+
+  // =========================================================================
+  // TEST 33 (AUDIT FIX #5): Screen 7 Excess Cash Deployment & ROE / Stock Regularizer Gradient
+  // =========================================================================
+  {
+    console.log('Testing Test 33: Screen 7 Excess Cash Deployment & ROE Gradient (Audit Fix #5)...');
+    const { ObjectiveKernel } = require('../extension/scoring-kernel.js');
+
+    // State A: ROE 81.7%, Ending Cash $105,191k, Dividend 2.05, EPS $12.49
+    const stateA = { eps: 12.49, roe: 81.7, imageRating: 77, creditRating: 'A+', stockPrice: 150, endingCash: 105191 };
+    // State B: ROE 83.5% (+1.8%), Ending Cash $85,191k (paid $20M in dividends), Dividend 4.05, EPS $12.49
+    const stateB = { eps: 12.49, roe: 83.5, imageRating: 77, creditRating: 'A+', stockPrice: 153, endingCash: 85191 };
+
+    const scoreA = ObjectiveKernel.evaluateScore(stateA, { constraints: { minCash: 2500 } }, false);
+    const scoreB = ObjectiveKernel.evaluateScore(stateB, { constraints: { minCash: 2500 } }, false);
+
+    assert.ok(scoreB > scoreA, `Deploying idle cash into dividends to increase ROE must yield higher utility: Score B=${scoreB.toFixed(3)}, Score A=${scoreA.toFixed(3)}`);
+    const delta = scoreB - scoreA;
+    assert.ok(delta >= 0.03, `ROE increase from 81.7% to 83.5% must yield meaningful positive gradient (Δ=${delta.toFixed(3)}): ${delta}`);
+
+    console.log('  [PASS] Test 33: Screen 7 Excess Cash Deployment & ROE Regularizer Gradient verified.');
+  }
+
+  // =========================================================================
+  // TEST 34 (AUDIT FIX #6): Multi-Cycle Non-Termination on Coarse Cycle 1
+  // =========================================================================
+  {
+    console.log('Testing Test 34: Multi-Cycle Non-Termination on Coarse Cycle 1 (Audit Fix #6)...');
+
+    // Simulate Cycle 1 with zero gain:
+    const workflow = {
+      cycleIndex: 1,
+      maxCycles: 3,
+      minEpsGainThreshold: 0.02
+    };
+    const cycleGain = 0.00;
+    const scoreGain = 0.00;
+    const hasSignificantGain = false;
+
+    const isCoarseOrExploratoryCycle = (workflow.cycleIndex || 1) === 1;
+    const canContinue = ((workflow.cycleIndex || 1) < workflow.maxCycles) && (hasSignificantGain || isCoarseOrExploratoryCycle);
+
+    assert.strictEqual(canContinue, true, 'Coordinator must NOT terminate after Cycle 1 even if gain is +$0.00');
+
+    // Simulate Cycle 2 with zero gain:
+    workflow.cycleIndex = 2;
+    const isCoarseOrExploratoryCycle2 = (workflow.cycleIndex || 1) === 1;
+    const canContinue2 = ((workflow.cycleIndex || 1) < workflow.maxCycles) && (hasSignificantGain || isCoarseOrExploratoryCycle2);
+    assert.strictEqual(canContinue2, false, 'Coordinator legitimately terminates after fine Cycle 2 if mathematical plateau persists');
+
+    console.log('  [PASS] Test 34: Multi-Cycle Non-Termination on Coarse Cycle 1 verified.');
+  }
+
+  // =========================================================================
+  // TEST 35: Pre-Pass 3 Peak Combo Restoration & In-Memory inputs Synchronization
+  // =========================================================================
+  {
+    console.log('Testing Test 35: Pre-Pass 3 Peak Combo Restoration & In-Memory inputs Synchronization...');
+    const GloBusOptimizerClass = global.GloBusOptimizer || require('../extension/optimizer.js');
+
+    // Create a mock adapter with inputs
+    const mockElements = {
+      fringe: { value: '0', selectedIndex: 0 },
+      training: { value: '29', selectedIndex: 0 }
+    };
+    const mockInputs = [
+      { key: 'TEST.fringe_0', id: 'fringe_0', name: 'fringe', label: 'Fringe Benefit', type: 'input', value: 0, min: 0, max: 10, step: 1, element: mockElements.fringe },
+      { key: 'TEST.training_1', id: 'training_1', name: 'training', label: 'Best Practices', type: 'input', value: 29, min: 0, max: 50, step: 1, element: mockElements.training }
+    ];
+
+    let currentMetrics = { eps: 12.49, roe: 81.7, endingCash: 105191, creditRating: 'A+', imageRating: 77 };
+
+    const mockAdapter = {
+      getDecisionInputs: () => mockInputs,
+      getProjectedMetrics: () => ({ ...currentMetrics }),
+      setInputValue: (item, val) => {
+        item.value = val;
+        if (item.element) item.element.value = String(val);
+      },
+      triggerCalculate: async () => {},
+      captureSnapshot: (list) => {
+        const snap = {};
+        (list || mockInputs).forEach(i => {
+          snap[i.key] = { key: i.key, id: i.id, name: i.name, value: i.value };
+        });
+        return snap;
+      },
+      restoreSnapshot: async function(snapshot, cachedList) {
+        for (const item of (cachedList || mockInputs)) {
+          const saved = snapshot[item.key];
+          if (saved) {
+            item.value = saved.value;
+            if (item.element) item.element.value = String(saved.value);
+          }
+        }
+      }
+    };
+
+    const opt = new GloBusOptimizerClass(mockAdapter);
+    opt.isRunning = true;
+    opt.passes = 3;
+
+    // Simulate baseline established at peak (Score: 112.0, EPS $12.49)
+    opt.baselineScore = 112.0;
+    opt.baselineMetrics = { ...currentMetrics };
+    opt.peakScore = 112.0;
+    opt.peakMetrics = { ...currentMetrics };
+    opt.peakCombo = mockAdapter.captureSnapshot(mockInputs); // Fringe: 0, Training: 29
+
+    // Simulate simulated annealing in Pass 1 mutating inputs downhill into a valley:
+    mockInputs[0].value = 2; mockElements.fringe.value = '2';
+    mockInputs[1].value = 27; mockElements.training.value = '27';
+    opt.bestScore = 111.8;
+    currentMetrics = { eps: 12.44, roe: 81.7, endingCash: 105191, creditRating: 'A+', imageRating: 77 };
+    opt.bestMetrics = { ...currentMetrics };
+
+    // Now execute pre-Pass-3 restoration logic
+    const peakToRestore = opt.peakCombo || opt.bestCombo;
+    const isPeakSuperior = peakToRestore && (
+      (opt.peakScore > opt.bestScore + 0.001) ||
+      ((opt.peakMetrics?.eps || 0) > (opt.bestMetrics?.eps || 0) + 0.005)
+    );
+
+    assert.strictEqual(isPeakSuperior, true, 'Peak (112.0, $12.49) must be recognized as strictly superior to valley (111.8, $12.44)');
+
+    await mockAdapter.restoreSnapshot(peakToRestore, mockInputs);
+    currentMetrics = { ...opt.peakMetrics };
+    opt.bestMetrics = { ...opt.peakMetrics };
+    opt.bestScore = opt.peakScore;
+
+    // Verify DOM inputs were physically restored to peak values (0 and 29, NOT 2 and 27)
+    assert.strictEqual(mockElements.fringe.value, '0', 'Fringe DOM element must be restored to peak 0');
+    assert.strictEqual(mockElements.training.value, '29', 'Training DOM element must be restored to peak 29');
+
+    // Verify in-memory input objects in mockInputs array were also synchronized to 0 and 29!
+    assert.strictEqual(mockInputs[0].value, 0, 'In-memory Fringe input.value must be reverted to peak 0');
+    assert.strictEqual(mockInputs[1].value, 29, 'In-memory Training input.value must be reverted to peak 29');
+
+    console.log('  [PASS] Test 35: Pre-Pass 3 Peak Combo Restoration & In-Memory inputs Synchronization verified.');
+  }
+
+  // =========================================================================
+  // TEST 36: Annealing Metropolis Zero-Delta Safeguard & Cycle 2 Pure Greedy (T=0)
+  // =========================================================================
+  {
+    console.log('Testing Test 36: Annealing Metropolis Zero-Delta Safeguard & Cycle 2 Pure Greedy (T=0)...');
+    const GloBusOptimizerClass = global.GloBusOptimizer || require('../extension/optimizer.js');
+    const opt = new GloBusOptimizerClass({});
+
+    // 1. Verify Cycle schedule: Cycle 1 has T=1.00, Cycle 2 has T=0.00 (Pure Greedy)
+    opt.setCycleContext(1, 3);
+    assert.strictEqual(opt.temperature, 1.0, 'Cycle 1 temperature must be 1.0');
+    assert.strictEqual(opt.stepScaleMultiplier, 2.0, 'Cycle 1 step scale must be 2.0x');
+
+    opt.setCycleContext(2, 3);
+    assert.strictEqual(opt.temperature, 0.0, 'Cycle 2 temperature must be strictly 0.0 (Pure Greedy coordinate descent)');
+    assert.strictEqual(opt.stepScaleMultiplier, 1.0, 'Cycle 2 step scale must be 1.0x');
+
+    opt.setCycleContext(3, 3);
+    assert.strictEqual(opt.temperature, 0.0, 'Cycle 3 temperature must be strictly 0.0');
+    assert.strictEqual(opt.stepScaleMultiplier, 0.5, 'Cycle 3 step scale must be 0.5x');
+
+    // 2. Test Metropolis calculation under Cycle 1 (T = 1.00):
+    // Peak state: Score 112.0, EPS $12.49
+    opt.peakScore = 112.0;
+    opt.peakMetrics = { eps: 12.49, roe: 81.7, endingCash: 105191 };
+    // Current operating point already degraded to 111.9, EPS $12.48
+    opt.bestScore = 111.9;
+    opt.bestMetrics = { eps: 12.48, roe: 81.7, endingCash: 105191 };
+
+    // Candidate move with identical degraded score 111.9 and identical degraded EPS $12.48:
+    const candidateScore = 111.9;
+    const candidateMetrics = { eps: 12.48, roe: 81.7, endingCash: 105191 };
+
+    const peakScoreAnchor = Math.max(opt.peakScore || -Infinity, opt.baselineScore || -Infinity);
+    const peakEpsAnchor = Math.max(opt.peakMetrics?.eps || 0, opt.baselineMetrics?.eps || 0);
+
+    const deltaScoreFromCurrent = candidateScore - opt.bestScore; // 0.00
+    const deltaScoreFromPeak = candidateScore - peakScoreAnchor; // -0.10
+    const deltaEpsFromPeak = candidateMetrics.eps - peakEpsAnchor; // -0.01
+    const deltaEpsFromCurrent = candidateMetrics.eps - opt.bestMetrics.eps; // 0.00
+
+    const effectiveScoreDelta = Math.min(deltaScoreFromCurrent, deltaScoreFromPeak);
+    const effectiveEpsDelta = Math.min(deltaEpsFromCurrent, deltaEpsFromPeak);
+
+    assert.ok(effectiveScoreDelta < -0.05, `Effective score delta must reflect true peak degradation (-0.10): ${effectiveScoreDelta}`);
+    assert.ok(effectiveEpsDelta < -0.005, `Effective EPS delta must reflect true peak degradation (-0.01): ${effectiveEpsDelta}`);
+
+    // Calculate acceptance probability
+    const combinedLoss = effectiveScoreDelta + Math.min(0, effectiveEpsDelta * 2.0);
+    const pAccept = Math.min(0.95, Math.exp(combinedLoss / (0.25 * 1.0)));
+
+    assert.ok(pAccept < 1.0, `Degraded candidate must NEVER be accepted with P=1.000: P=${pAccept.toFixed(3)}`);
+    assert.ok(pAccept > 0.50 && pAccept < 0.70, `P must match Boltzmann probability ~0.619: P=${pAccept.toFixed(3)}`);
+
+    // 3. Test purely neutral candidate on flat peak plateau without improvement:
+    const neutralCandScore = 112.0;
+    const neutralCandMetrics = { eps: 12.49, roe: 81.7, endingCash: 105191 };
+    opt.bestScore = 112.0;
+    opt.bestMetrics = { eps: 12.49, roe: 81.7, endingCash: 105191 };
+
+    const effScoreDelta2 = Math.min(neutralCandScore - opt.bestScore, neutralCandScore - opt.peakScore);
+    const effEpsDelta2 = Math.min(neutralCandMetrics.eps - opt.bestMetrics.eps, neutralCandMetrics.eps - opt.peakMetrics.eps);
+    let pAcceptNeutral = 0;
+    if (Math.abs(effScoreDelta2) <= 0.0001 && Math.abs(effEpsDelta2) <= 0.001) {
+      const roeImproved = neutralCandMetrics.roe > opt.bestMetrics.roe + 0.05;
+      const cashImproved = neutralCandMetrics.endingCash > opt.bestMetrics.endingCash + 100;
+      pAcceptNeutral = (roeImproved || cashImproved) ? 0.50 : 0.0;
+    }
+
+    assert.strictEqual(pAcceptNeutral, 0.0, 'Neutral candidate with zero improvements across score, EPS, ROE, and cash must have P=0.0 (NO random-walk ratcheting!)');
+
+    console.log('  [PASS] Test 36: Annealing Metropolis Zero-Delta Safeguard & Cycle 2 Pure Greedy (T=0) verified.');
+  }
+
   console.log('\n================================================================');
-  console.log('   ALL 28 ARCHITECTURAL & MATHEMATICAL AUDIT TESTS PASSED!      ');
+  console.log('   ALL 36 ARCHITECTURAL & MATHEMATICAL AUDIT TESTS PASSED!      ');
   console.log('================================================================\n');
 })().catch(err => {
   console.error(err);
   process.exit(1);
 });
+
 

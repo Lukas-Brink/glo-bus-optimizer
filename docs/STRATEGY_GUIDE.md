@@ -70,5 +70,19 @@ Because the simulation uses a balanced scorecard, over-optimizing one metric at 
 ## 4. How the Algorithmic Engine Beats Manual Guesswork
 
 1. **Coupled Cross-Elasticity Optimization**: Rather than adjusting variables in isolation, the optimizer uses diagonal coupled exploration to tune interdependent pairs simultaneously (e.g., regional price vs. advertising, base wages vs. incentives, stock buybacks vs. dividends).
-2. **Multi-Pass Gauss-Seidel Convergence**: Changes on later screens (e.g., workforce capacity adjustments or debt paydowns) alter the optimal pricing on earlier screens. The engine's multi-cycle coordinator re-evaluates all screens sequentially until portfolio EPS mathematically converges ($\Delta \text{EPS} < \$0.02$).
-3. **Hard Constraint Enforcement**: The engine rejects any permutation that drops Ending Cash below $2,500k or causes Credit Rating to drop below A-, guaranteeing financial stability and top-tier rankings.
+2. **Multi-Cycle Simulated Annealing Convergence**: The engine employs a multi-cycle coordinator that sweeps all 7 screens sequentially up to 3 passes:
+   - **Cycle 1 (Exploration)**: Coarse 2.0x step scaling and simulated annealing (T = 1.00) prevents entrapment in shallow local pockets. Early cycle termination is prohibited so the solver always transitions to fine descent.
+   - **Cycle 2 (Descent)**: Standard 1.0x step scaling with pure greedy coordinate descent (T = 0.00).
+   - **Cycle 3 (Polish)**: Fine 0.5x step scaling for micron-level parameter tuning around the converged basin.
+3. **True-Peak Anchored Metropolis Acceptance**: Candidate downhill evaluations are anchored to global peak scores and EPS benchmarks rather than local valleys, rejecting zero-delta random-walk ratcheting.
+4. **Intermediate Peak Restoration**: If simulated annealing moves drift away from peak territory, physical inputs and cached DOM representations are automatically restored to the recorded champion state before launching subsequent cycles.
+5. **Hard Constraint Enforcement**: The engine strictly rejects any permutation that drops Ending Cash below $2,500k or causes Credit Rating to drop below A-, guaranteeing financial stability and preventing punitive emergency loans.
+
+---
+
+## 5. Performance Disclaimer & Competitive Dynamics
+
+- **Performance Disclaimer**: Real-world strategic performance is kinda iffy because GLO-BUS is an interactive, simultaneous-decision oligopoly. The optimizer produces decisions that maximize pro-forma score assuming competitor decisions from the previous round remain unchanged.
+- **Competitor Shifts**: If rival teams in your league significantly alter their prices, launch aggressive promotional campaigns, or expand assembly capacity, market elasticity and regional clearing prices will shift when the round processes.
+- **Round-by-Round Adaptation**: Always consult the latest Competitive Intelligence Report (CIR) and Company Analysis reports after round processing. Treat optimizer output as an intelligent baseline, and adjust strategic positioning to counter rival moves.
+

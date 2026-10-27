@@ -89,7 +89,7 @@ class GloBusOptimizer {
       this.temperature = 1.0;
       this.stepScaleMultiplier = 2.0;
     } else if (cycleIndex === 2) {
-      this.temperature = 0.3;
+      this.temperature = 0.0; // Pure greedy coordinate descent for Deep Convergence (User Request #2)
       this.stepScaleMultiplier = 1.0;
     } else {
       this.temperature = 0.0;
@@ -337,13 +337,19 @@ class GloBusOptimizer {
     }
 
     // Log whenever Image Rating changes — any page, any input category.
-    const delta = metrics.imageRating - preImageRating;
+    // Log whenever Image Rating changes — any page, any input category.
+    // Always compare against the active champion baseline to avoid probe pollution in telemetry!
+    const championMetrics = this.bestMetrics || preMetrics;
+    const championImage = championMetrics?.imageRating ?? preImageRating;
+    const delta = metrics.imageRating - championImage;
     if (delta !== 0) {
       const sign = delta > 0 ? '+' : '';
       const score = this.evaluateScore(metrics).toFixed(1);
-      const baseScore = this.evaluateScore(preMetrics).toFixed(1);
+      const baseScore = (this.bestScore !== undefined && this.bestScore !== -Infinity)
+        ? this.bestScore.toFixed(1)
+        : this.evaluateScore(championMetrics).toFixed(1);
       getLogger().info('IMG-PROBE',
-        `[${item.label || item.name}] = ${value} → Image: ${preImageRating} → ${metrics.imageRating} (Δ${sign}${delta}) | EPS: $${metrics.eps.toFixed(2)} | Score: ${baseScore} → ${score}`
+        `[${item.label || item.name}] = ${value} → Image: ${championImage} → ${metrics.imageRating} (Δ${sign}${delta}) | EPS: $${metrics.eps.toFixed(2)} | Score: ${baseScore} → ${score}`
       );
     }
 
@@ -351,10 +357,40 @@ class GloBusOptimizer {
   }
 
   /**
+   * Evaluates if state A is strictly superior to state B using Multi-Objective criteria:
+   * 1. Higher composite game score (sA > sB + 0.001)
+   * 2. Plateau (|sA - sB| <= 0.05) with higher EPS (epsA > epsB + 0.005)
+   * 3. Plateau with equal EPS (|epsA - epsB| <= 0.005) and higher ROE (roeA > roeB + 0.05)
+   * 4. Plateau with equal EPS and equal ROE with higher Ending Cash (cashA > cashB + 100)
+   */
+  isSuperior(sA, mA, sB, mB) {
+    if (sA === undefined || sA === null || sA === -Infinity) return false;
+    if (sB === undefined || sB === null || sB === -Infinity) return true;
+    if (sA > sB + 0.001) return true;
+    if (Math.abs(sA - sB) <= 0.05) {
+      const epsA = mA?.eps || 0;
+      const epsB = mB?.eps || 0;
+      if (epsA > epsB + 0.005) return true;
+      if (epsA >= epsB - 0.005) {
+        const roeA = mA?.roe || 0;
+        const roeB = mB?.roe || 0;
+        if (roeA > roeB + 0.05) return true;
+        if (roeA >= roeB - 0.01) {
+          const cashA = mA?.endingCash || 0;
+          const cashB = mB?.endingCash || 0;
+          if (cashA > cashB + 100) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
    * Evaluates if a given candidate state (score, metrics) is strictly superior to the current recorded peak.
    * Glo-Bus Multi-Objective Tie-Breaking Criterion:
    * 1. Higher composite game score (score > peakScore + 0.001)
    * 2. Equal composite game score plateau (|score - peakScore| <= 0.05) with higher EPS (candidateEPS > peakEPS + 0.005)
+   * 3. Equal composite score & EPS with higher ROE (candidateROE > peakROE + 0.05)
    */
   isNewPeak(score, metrics) {
     if (this.peakScore === undefined || this.peakScore === null || this.peakScore === -Infinity) return true;
@@ -362,7 +398,12 @@ class GloBusOptimizer {
     if (Math.abs(score - this.peakScore) <= 0.05) {
       const peakEPS = this.peakMetrics?.eps || 0;
       const candidateEPS = metrics?.eps || 0;
-      return candidateEPS > peakEPS + 0.005;
+      if (candidateEPS > peakEPS + 0.005) return true;
+      if (candidateEPS >= peakEPS - 0.005) {
+        const peakROE = this.peakMetrics?.roe || 0;
+        const candidateROE = metrics?.roe || 0;
+        if (candidateROE > peakROE + 0.05) return true;
+      }
     }
     return false;
   }
@@ -398,10 +439,13 @@ class GloBusOptimizer {
     // Set operational solvency phase based on active screen
     const detectedPage = this.adapter?.detectPageType ? this.adapter.detectPageType() : (this.adapter?.pageType || 'UNKNOWN');
     const isFinanceScreen = detectedPage === 'FINANCE';
-    this.isOperationalPhase = !isFinanceScreen && detectedPage !== 'UNKNOWN';
+    const isCsrScreen = detectedPage === 'CSR';
+    this.isOperationalPhase = !isFinanceScreen && !isCsrScreen && detectedPage !== 'UNKNOWN';
 
     if (this.isOperationalPhase) {
       log.info('SOLVENCY', `Operational Screen [${detectedPage}]: Scoring with Debt Shadow Cost (Investments allowed to run deficits for Screen 7 financing).`);
+    } else if (isCsrScreen) {
+      log.info('SOLVENCY', `Corporate Citizenship Screen [${detectedPage}]: Authentic Multi-Objective Scoring ACTIVE (Image recovery and brand equity optimization).`);
     } else {
       log.info('SOLVENCY', `Finance Screen [${detectedPage}]: Strict Solvency Gate ACTIVE (Enforcing Ending Cash >= $${this.getActiveConfig().constraints.minCash}k and Credit >= A-).`);
     }
@@ -724,6 +768,60 @@ class GloBusOptimizer {
     // Strictly Greedy: Polish passes must never accept exploratory downhill moves!
     this.currentPass = 3;
     log.step('PASS 3', `Pass 3: Fine relaxation polish across ${inputs.length} variables...`);
+
+    // Pre-Pass 3 Peak Combo Restoration (Audit Fix #3 & Bug #1):
+    // If Pass 1 or Pass 2 accepted exploratory annealing moves and drifted into a valley,
+    // restore the recorded Peak Combo BEFORE running Pass 3 so fine relaxation polish
+    // optimizes from the absolute best known state, rather than trying to climb out of a degraded valley.
+    const peakToRestore = this.peakCombo || this.bestCombo;
+    const isPeakSuperior = peakToRestore && (
+      (this.peakScore > this.bestScore + 0.001) ||
+      ((this.peakMetrics?.eps || 0) > (this.bestMetrics?.eps || 0) + 0.005) ||
+      (Math.abs((this.peakScore || 0) - (this.bestScore || 0)) <= 0.05 && ((this.peakMetrics?.roe || 0) > (this.bestMetrics?.roe || 0) + 0.05))
+    );
+
+    if (isPeakSuperior) {
+      log.info('PASS 3', `Restoring recorded peak combination before fine polish (Peak Score: ${this.peakScore.toFixed(1)}, EPS: $${this.peakMetrics?.eps?.toFixed(2)})...`);
+      await this.adapter.restoreSnapshot(peakToRestore, inputs);
+      await this.adapter.triggerCalculate();
+      this.bestMetrics = this.adapter.getProjectedMetrics();
+      this.bestScore = this.evaluateScore(this.bestMetrics);
+    }
+
+    // Re-synchronize BOTH in-memory input states AND DOM elements with peakToRestore
+    // Guarantees Pass 3 never inherits stale annealed values (e.g. 2, 27, 2, 18...) and overwrites the DOM!
+    if (peakToRestore) {
+      for (const item of inputs) {
+        const saved = peakToRestore[item.key] || peakToRestore[item.id] || peakToRestore[item.name];
+        if (saved !== undefined) {
+          if (item.type === 'select') {
+            let idx = saved.selectedIndex;
+            if (idx === undefined && saved.value !== undefined) {
+              const optIdx = item.options ? item.options.findIndex(o => String(o.value) === String(saved.value)) : -1;
+              idx = optIdx !== -1 ? optIdx : parseInt(saved.value, 10);
+            }
+            if (idx !== undefined && !isNaN(idx)) {
+              item.selectedIndex = idx;
+              item.value = saved.value;
+              if (item.element) item.element.selectedIndex = idx;
+            }
+          } else {
+            const numVal = typeof saved.value === 'number' ? saved.value : parseFloat(String(saved.value).replace(/,/g, ''));
+            item.value = Number.isFinite(numVal) ? numVal : saved.value;
+            if (item.element) item.element.value = saved.value;
+          }
+        } else if (item.element) {
+          if (item.type === 'select') {
+            item.selectedIndex = item.element.selectedIndex;
+            item.value = item.element.value;
+          } else {
+            const raw = parseFloat(String(item.element.value || '').replace(/,/g, ''));
+            if (Number.isFinite(raw)) item.value = raw;
+          }
+        }
+      }
+    }
+
     const savedTemp = this.temperature;
     this.temperature = 0.0;
     try {
@@ -785,140 +883,148 @@ class GloBusOptimizer {
     let step = 0;
     const totalSteps = inputs.length;
 
-    for (const item of inputs) {
-      if (!this.isRunning || this.isStopped) break;
-      step++;
-      const regionKey = getRegionKey(item) || `reg_${step}`;
-      const regionName = regionNames[regionKey] || item.label;
+    try {
+      // Temporary Pro-Forma Calibration (Audit Fix #4):
+      // Glo-Bus only renders live Value Index and Contribution Margin per unit when the regional incorporation
+      // toggle is set to "Yes". We temporarily enable them to calibrate the exact discount % that lands in the
+      // winning Value Index sweet spot (51-55) with safe margin.
+      this.adapter.setSpecialContractAssumptions({ na: true, ea: true, ap: true, la: true });
+      await this.adapter.triggerCalculate();
 
-      if (this.onProgress) {
-        this.onProgress(step, totalSteps, `Auction: ${regionName}`, this.bestMetrics);
-      }
+      for (const item of inputs) {
+        if (!this.isRunning || this.isStopped) break;
+        step++;
+        const regionKey = getRegionKey(item) || `reg_${step}`;
+        const regionName = regionNames[regionKey] || item.label;
 
-      let contractData = this.adapter.getSpecialContractData();
-      let rData = contractData[regionKey] || { valueIndex: 0, marginPerUnit: 100 };
+        if (this.onProgress) {
+          this.onProgress(step, totalSteps, `Auction: ${regionName}`, this.bestMetrics);
+        }
 
-      let currentDiscount = Math.round(Number(item.value) || 0);
+        let contractData = this.adapter.getSpecialContractData();
+        let rData = contractData[regionKey] || { valueIndex: 0, marginPerUnit: 100 };
 
-      log.info('CONTRACTS', `Evaluating [${regionName}]: Initial Discount: ${currentDiscount}%, Value Index: ${rData.valueIndex || 'N/A'}, Margin: $${rData.marginPerUnit.toFixed(2)}/unit`);
+        let currentDiscount = Math.round(Number(item.value) || 0);
 
-      // If margin is dangerously low, opt out (0% discount) to prevent destroying profit
-      if (rData.marginPerUnit > 0 && rData.marginPerUnit < SAFE_MIN_MARGIN) {
-        log.warn('CONTRACTS', `[${regionName}] Margin ($${rData.marginPerUnit.toFixed(2)}/unit) below safe threshold ($${SAFE_MIN_MARGIN}). Opting out (0% discount).`);
-        this.adapter.setInputValue(item, 0);
-        item.value = 0;
-        await this.adapter.triggerCalculate();
-        continue;
-      }
+        log.info('CONTRACTS', `Evaluating [${regionName}]: Initial Discount: ${currentDiscount}%, Value Index: ${rData.valueIndex || 'N/A'}, Margin: $${rData.marginPerUnit.toFixed(2)}/unit`);
 
-      // Two-Tiered Contract Capacity Reservation & Outsourcing Gate (Fix #4)
-      if (CapacityKernel && CapacityKernel.ContractReservation) {
-        const capacityCheck = CapacityKernel.ContractReservation.evaluateContractBid(
-          { region: regionKey, discount: currentDiscount, bidPrice: 200, estimatedBOM: 95, estimatedLabor: 35 },
-          { regularCapacity: 300000, maxOvertimeCapacity: 360000, retailDemand: 290000 }
-        );
-        if (!capacityCheck.isApproved) {
-          log.warn('CONTRACTS', `[${regionName}] Capacity Gate: ${capacityCheck.reason}`);
+        // If margin is dangerously low, opt out (0% discount) to prevent destroying profit
+        if (rData.marginPerUnit > 0 && rData.marginPerUnit < SAFE_MIN_MARGIN) {
+          log.warn('CONTRACTS', `[${regionName}] Margin ($${rData.marginPerUnit.toFixed(2)}/unit) below safe threshold ($${SAFE_MIN_MARGIN}). Opting out (0% discount).`);
           this.adapter.setInputValue(item, 0);
           item.value = 0;
           await this.adapter.triggerCalculate();
           continue;
         }
-      }
 
-      // If Value Index can be read from the table:
-      if (rData.valueIndex > 0) {
-        let attempts = 0;
-        let lastVI = rData.valueIndex;
-        // 1. If Value Index is too low (< 51): increase discount until we hit the sweet spot
-        while (rData.valueIndex < TARGET_VI_MIN && currentDiscount < 35 && (!rData.marginPerUnit || rData.marginPerUnit >= SAFE_MIN_MARGIN) && attempts < 10) {
-          if (!this.isRunning || this.isStopped) break;
-          attempts++;
-          currentDiscount++;
-          this.adapter.setInputValue(item, currentDiscount);
-          item.value = currentDiscount;
-          await this.adapter.triggerCalculate();
-          contractData = this.adapter.getSpecialContractData();
-          rData = contractData[regionKey] || rData;
-          if (rData.marginPerUnit < SAFE_MIN_MARGIN) {
-            // Back off 1 step if margin dropped below threshold
-            currentDiscount--;
-            this.adapter.setInputValue(item, currentDiscount);
-            item.value = currentDiscount;
+        // Two-Tiered Contract Capacity Reservation & Outsourcing Gate (Fix #4)
+        if (CapacityKernel && CapacityKernel.ContractReservation) {
+          const capacityCheck = CapacityKernel.ContractReservation.evaluateContractBid(
+            { region: regionKey, discount: currentDiscount, bidPrice: 200, estimatedBOM: 95, estimatedLabor: 35 },
+            { regularCapacity: 300000, maxOvertimeCapacity: 360000, retailDemand: 290000 }
+          );
+          if (!capacityCheck.isApproved) {
+            log.warn('CONTRACTS', `[${regionName}] Capacity Gate: ${capacityCheck.reason}`);
+            this.adapter.setInputValue(item, 0);
+            item.value = 0;
             await this.adapter.triggerCalculate();
-            break;
+            continue;
           }
-          if (rData.valueIndex === lastVI && attempts > 1) {
-            // Table is not updating dynamically (e.g. static mock)
-            break;
-          }
-          lastVI = rData.valueIndex;
         }
 
-        attempts = 0;
-        lastVI = rData.valueIndex;
-        // 2. If Value Index is too high (> 56): reduce discount to capture higher contribution margin
-        while (rData.valueIndex > TARGET_VI_MAX && currentDiscount > 0 && attempts < 10) {
-          if (!this.isRunning || this.isStopped) break;
-          attempts++;
-          currentDiscount--;
-          this.adapter.setInputValue(item, currentDiscount);
-          item.value = currentDiscount;
-          await this.adapter.triggerCalculate();
-          contractData = this.adapter.getSpecialContractData();
-          rData = contractData[regionKey] || rData;
-          if (rData.valueIndex < TARGET_VI_MIN) {
-            // Back up 1 step if we dropped below target
+        // If Value Index can be read from the table:
+        if (rData.valueIndex > 0) {
+          let attempts = 0;
+          let lastVI = rData.valueIndex;
+          // 1. If Value Index is too low (< 51): increase discount until we hit the sweet spot
+          while (rData.valueIndex < TARGET_VI_MIN && currentDiscount < 35 && (!rData.marginPerUnit || rData.marginPerUnit >= SAFE_MIN_MARGIN) && attempts < 10) {
+            if (!this.isRunning || this.isStopped) break;
+            attempts++;
             currentDiscount++;
             this.adapter.setInputValue(item, currentDiscount);
             item.value = currentDiscount;
             await this.adapter.triggerCalculate();
-            break;
+            contractData = this.adapter.getSpecialContractData();
+            rData = contractData[regionKey] || rData;
+            if (rData.marginPerUnit < SAFE_MIN_MARGIN) {
+              // Back off 1 step if margin dropped below threshold
+              currentDiscount--;
+              this.adapter.setInputValue(item, currentDiscount);
+              item.value = currentDiscount;
+              await this.adapter.triggerCalculate();
+              break;
+            }
+            if (rData.valueIndex === lastVI && attempts > 1) {
+              // Table is not updating dynamically (e.g. static mock)
+              break;
+            }
+            lastVI = rData.valueIndex;
           }
-          if (rData.valueIndex === lastVI && attempts > 1) {
-            // Table is not updating dynamically (e.g. static mock)
-            break;
-          }
-          lastVI = rData.valueIndex;
-        }
-      } else {
-        // Fallback for mocked or unrendered table: establish standard competitive benchmark (20-22%)
-        if (currentDiscount < 15 || currentDiscount > 28) {
-          currentDiscount = 21;
-          this.adapter.setInputValue(item, currentDiscount);
-          item.value = currentDiscount;
-          await this.adapter.triggerCalculate();
-        }
-      }
 
-      contractData = this.adapter.getSpecialContractData();
-      rData = contractData[regionKey] || rData;
-      log.success('CONTRACTS', `Finalized [${regionName}]: Discount: ${currentDiscount}%, Value Index: ${rData.valueIndex || 'Est. 52-54'}, Margin: $${rData.marginPerUnit.toFixed(2)}/unit`);
-      await new Promise(r => setTimeout(r, 60));
+          attempts = 0;
+          lastVI = rData.valueIndex;
+          // 2. If Value Index is too high (> 56): reduce discount to capture higher contribution margin
+          while (rData.valueIndex > TARGET_VI_MAX && currentDiscount > 0 && attempts < 10) {
+            if (!this.isRunning || this.isStopped) break;
+            attempts++;
+            currentDiscount--;
+            this.adapter.setInputValue(item, currentDiscount);
+            item.value = currentDiscount;
+            await this.adapter.triggerCalculate();
+            contractData = this.adapter.getSpecialContractData();
+            rData = contractData[regionKey] || rData;
+            if (rData.valueIndex < TARGET_VI_MIN) {
+              // Back up 1 step if we dropped below target
+              currentDiscount++;
+              this.adapter.setInputValue(item, currentDiscount);
+              item.value = currentDiscount;
+              await this.adapter.triggerCalculate();
+              break;
+            }
+            if (rData.valueIndex === lastVI && attempts > 1) {
+              // Table is not updating dynamically (e.g. static mock)
+              break;
+            }
+            lastVI = rData.valueIndex;
+          }
+        } else {
+          // Fallback for mocked or unrendered table: establish standard competitive benchmark (20-22%)
+          if (currentDiscount < 15 || currentDiscount > 28) {
+            currentDiscount = 21;
+            this.adapter.setInputValue(item, currentDiscount);
+            item.value = currentDiscount;
+            await this.adapter.triggerCalculate();
+          }
+        }
+
+        contractData = this.adapter.getSpecialContractData();
+        rData = contractData[regionKey] || rData;
+        log.success('CONTRACTS', `Finalized [${regionName}]: Discount: ${currentDiscount}%, Value Index: ${rData.valueIndex || 'Est. 52-54'}, Margin: $${rData.marginPerUnit.toFixed(2)}/unit`);
+        await new Promise(r => setTimeout(r, 60));
+      }
+    } finally {
+      // Cash-Defensive Solvency Policy (Audit Fix #4):
+      // In Glo-Bus, setting "Incorporate projected outcomes" to "Yes" adds hypothetical contract
+      // revenues (+$8.2M cash, +$0.41 EPS) into pro-forma statements.
+      // If incorporated, the Finance screen allocates buybacks and dividends under the assumption that
+      // this speculative cash is 100% guaranteed. If competitors outbid in any region, that cash never
+      // materializes, causing an emergency overdraft loan (12%+ penalty) and credit collapse.
+      //
+      // Therefore, we keep all discount offers (bids) fully active (21-25%) so the company competes to win,
+      // but strictly force all regional pro-forma incorporation toggles back to "No" in this finally block.
+      // This guarantees that Finance plans strictly against guaranteed revenues, protecting the $2,500k cash buffer.
+      const assumptionMap = {
+        na: false,
+        ea: false,
+        ap: false,
+        la: false
+      };
+      this.adapter.setSpecialContractAssumptions(assumptionMap);
+      await this.adapter.triggerCalculate();
+      log.info('CONTRACTS', 'Cash-Defensive Solvency Policy: Regional incorporation toggles set to "No" to protect Finance cash buffer. (Discount bids remain active!)');
     }
 
     if (!this.isRunning || this.isStopped) return;
-
-    // Cash-Defensive Solvency Policy:
-    // In Glo-Bus, setting "Incorporate projected outcomes" to "Yes" adds hypothetical contract
-    // revenues (+$8.2M cash, +$0.41 EPS) into pro-forma statements.
-    // If incorporated, the Finance screen allocates buybacks and dividends under the assumption that
-    // this speculative cash is 100% guaranteed. If competitors outbid in any region, that cash never
-    // materializes, causing an emergency overdraft loan (12%+ penalty) and credit collapse.
-    //
-    // Therefore, we keep all discount offers (bids) fully active (21-25%) so the company competes to win,
-    // but set all regional pro-forma incorporation toggles to "No". This guarantees that Finance plans
-    // strictly against guaranteed revenues, protecting the $2,500k cash buffer. Any contracts won on
-    // round processing become 100% pure profit and cash surplus upside with zero overdraft risk.
-    const assumptionMap = {
-      na: false,
-      ea: false,
-      ap: false,
-      la: false
-    };
-    this.adapter.setSpecialContractAssumptions(assumptionMap);
-    await this.adapter.triggerCalculate();
-    log.info('CONTRACTS', 'Cash-Defensive Solvency Policy: Regional incorporation toggles set to "No" to protect Finance cash buffer. (Discount bids remain active!)');
 
     this.bestCombo = this.adapter.captureSnapshot(inputs);
     this.bestMetrics = this.adapter.getProjectedMetrics();
@@ -992,8 +1098,22 @@ class GloBusOptimizer {
    */
   async optimizeCoupledPair(itemA, itemB, allInputsList = null) {
     const log = getLogger();
-    const valA = itemA.type === 'select' ? itemA.selectedIndex : itemA.value;
-    const valB = itemB.type === 'select' ? itemB.selectedIndex : itemB.value;
+    const getVal = (item) => {
+      if (item.type === 'select') {
+        return (item.element && item.element.selectedIndex !== undefined) ? item.element.selectedIndex : (item.selectedIndex ?? 0);
+      }
+      if (item.element && item.element.value !== undefined && item.element.value !== '') {
+        const parsed = parseFloat(String(item.element.value).replace(/,/g, '').replace(/[^0-9.-]/g, ''));
+        return Number.isFinite(parsed) ? parsed : (typeof item.value === 'number' ? item.value : 0);
+      }
+      return typeof item.value === 'number' ? item.value : 0;
+    };
+    const valA = getVal(itemA);
+    const valB = getVal(itemB);
+    itemA.value = valA;
+    itemB.value = valB;
+    if (itemA.type === 'select') itemA.selectedIndex = valA;
+    if (itemB.type === 'select') itemB.selectedIndex = valB;
     const cycleScale = this.stepScaleMultiplier !== undefined ? this.stepScaleMultiplier : 1.0;
     const isIntA = Boolean(itemA.isInteger || itemA.type === 'select' || (Number.isInteger(itemA.step) && itemA.step >= 1));
     const isIntB = Boolean(itemB.isInteger || itemB.type === 'select' || (Number.isInteger(itemB.step) && itemB.step >= 1));
@@ -1040,7 +1160,7 @@ class GloBusOptimizer {
         log.info('IMG-PROBE', `[Coupled: ${itemA.label || itemA.name} & ${itemB.label || itemB.name}] = (${cand.a}, ${cand.b}) → Image: ${this.bestMetrics.imageRating} → ${metrics.imageRating} (Δ${sign}${delta}) | Score: ${score.toFixed(1)}`);
       }
 
-      if (score > this.bestScore || (Math.abs(score - this.bestScore) <= 0.05 && metrics.eps > (this.bestMetrics?.eps || 0) + 0.005)) {
+      if (this.isSuperior(score, metrics, this.bestScore, this.bestMetrics)) {
         this.bestScore = score;
         this.bestMetrics = metrics;
         bestPair = cand;
@@ -1086,7 +1206,7 @@ class GloBusOptimizer {
 
           const score = this.evaluateScore(metrics);
 
-          if (score > this.bestScore || (Math.abs(score - this.bestScore) <= 0.05 && metrics.eps > (this.bestMetrics?.eps || 0) + 0.005)) {
+          if (this.isSuperior(score, metrics, this.bestScore, this.bestMetrics)) {
             this.bestScore = score;
             this.bestMetrics = metrics;
             bestPair = { a: nextA, b: nextB };
@@ -1131,7 +1251,21 @@ class GloBusOptimizer {
   async optimizeSingleParameter(item, stepScale = 1.0, allInputsList = null) {
     if (!this.isRunning || this.isStopped) return false;
     const log = getLogger();
-    const currentVal = item.type === 'select' ? item.selectedIndex : item.value;
+    // Always read currentVal directly from live element if present to avoid stale memory drift
+    let currentVal;
+    if (item.type === 'select') {
+      currentVal = (item.element && item.element.selectedIndex !== undefined) ? item.element.selectedIndex : (item.selectedIndex ?? 0);
+      item.selectedIndex = currentVal;
+    } else {
+      if (item.element && item.element.value !== undefined && item.element.value !== '') {
+        const domStr = String(item.element.value).trim();
+        const parsed = parseFloat(domStr.replace(/,/g, '').replace(/[^0-9.-]/g, ''));
+        currentVal = Number.isFinite(parsed) ? parsed : (typeof item.value === 'number' ? item.value : 0);
+      } else {
+        currentVal = typeof item.value === 'number' ? item.value : 0;
+      }
+      item.value = currentVal;
+    }
     const cycleScale = this.stepScaleMultiplier !== undefined ? this.stepScaleMultiplier : 1.0;
     const isInteger = Boolean(item.isInteger || item.type === 'select' || (Number.isInteger(item.step) && item.step >= 1));
     let step = item.step * stepScale * cycleScale;
@@ -1140,12 +1274,27 @@ class GloBusOptimizer {
     } else {
       step = Math.max(0.01, step);
     }
-    let bestVal = currentVal;
-    let improved = false;
+
+    const itemLabel = (item.label + ' ' + item.name + ' ' + (item.id || '')).toLowerCase();
     const paramName = item.label || item.name || 'Param';
 
+    // Audit Fix #5: Dynamic Excess Cash Deployment for Dividends on Screen 7
+    // When ending cash exceeds generous solvency cushions ($20M - $50M), probe larger steps
+    // so guaranteed idle cash is actively deployed into dividends, boosting ROE and Stock Price.
+    const isDividend = itemLabel.includes('dividend');
+    if (isDividend) {
+      const currentCash = this.bestMetrics?.endingCash || this.baselineMetrics?.endingCash || 0;
+      if (currentCash > 50000) {
+        step = Math.max(step, 0.50);
+      } else if (currentCash > 20000) {
+        step = Math.max(step, 0.25);
+      }
+    }
+
+    let bestVal = currentVal;
+    let improved = false;
+
     // Glo-Bus Financial Safeguard: Mutual Exclusivity between Stock Issue & Stock Repurchase
-    const itemLabel = (item.label + ' ' + item.name + ' ' + (item.id || '')).toLowerCase();
     const isStockIssue = itemLabel.includes('issue') && (itemLabel.includes('stock') || itemLabel.includes('share'));
     const isStockRepurchase = itemLabel.includes('repurchase') || itemLabel.includes('buyback');
 
@@ -1256,11 +1405,16 @@ class GloBusOptimizer {
     if (!this.isRunning || this.isStopped) return false;
 
     // 2. Test Downward perturbation
+    // Audit Fix #2: Clean DOM probe restoration before evaluating opposing direction
     const testValDown = Math.max(item.min, isInteger ? Math.round(currentVal - step) : currentVal - step);
     let scoreDown = -Infinity;
     let metricsDown = null;
 
     if (testValDown !== currentVal) {
+      if (testValUp !== currentVal) {
+        this.adapter.setInputValue(item, currentVal);
+        await this.adapter.triggerCalculate();
+      }
       metricsDown = await this.evaluateInput(item, testValDown);
       scoreDown = this.evaluateScore(metricsDown);
     }
@@ -1269,23 +1423,31 @@ class GloBusOptimizer {
 
     // 2b. Multi-scale exploration: if continuous variable and neither +/-1 step improved, test exploratory 2.5x step
     if (scoreUp <= this.bestScore && scoreDown <= this.bestScore && item.type !== 'select') {
+      if (testValDown !== currentVal) {
+        this.adapter.setInputValue(item, currentVal);
+        await this.adapter.triggerCalculate();
+      }
       const exploreStep = isInteger ? Math.max(1, Math.round(step * 2)) : step * 2.5;
       const testValUpExp = allowBorrowUp ? Math.min(item.max, isInteger ? Math.round(currentVal + exploreStep) : currentVal + exploreStep) : currentVal;
       if (testValUpExp !== testValUp && testValUpExp !== currentVal) {
         const mUpExp = await this.evaluateInput(item, testValUpExp);
         const sUpExp = this.evaluateScore(mUpExp);
-        if (sUpExp > this.bestScore) {
+        if (this.isSuperior(sUpExp, mUpExp, this.bestScore, this.bestMetrics)) {
           scoreUp = sUpExp;
           metricsUp = mUpExp;
           bestVal = testValUpExp;
         }
       }
       if (scoreUp <= this.bestScore && this.isRunning && !this.isStopped) {
+        if (testValUpExp !== currentVal) {
+          this.adapter.setInputValue(item, currentVal);
+          await this.adapter.triggerCalculate();
+        }
         const testValDownExp = Math.max(item.min, isInteger ? Math.round(currentVal - exploreStep) : currentVal - exploreStep);
         if (testValDownExp !== testValDown && testValDownExp !== currentVal) {
           const mDownExp = await this.evaluateInput(item, testValDownExp);
           const sDownExp = this.evaluateScore(mDownExp);
-          if (sDownExp > this.bestScore) {
+          if (this.isSuperior(sDownExp, mDownExp, this.bestScore, this.bestMetrics)) {
             scoreDown = sDownExp;
             metricsDown = mDownExp;
             bestVal = testValDownExp;
@@ -1296,10 +1458,10 @@ class GloBusOptimizer {
 
     if (!this.isRunning || this.isStopped) return false;
 
-    // 3. Determine winning direction & apply momentum with Multi-Objective Tie-Breaking
-    const isSuperior = (sA, mA, sB, mB) => sA > sB + 0.001 || (Math.abs(sA - sB) <= 0.05 && (mA?.eps || 0) > (mB?.eps || 0) + 0.005);
+    let acceptedViaAnneal = false;
 
-    if (isSuperior(scoreUp, metricsUp, this.bestScore, this.bestMetrics) && (scoreUp > scoreDown || (Math.abs(scoreUp - scoreDown) <= 0.05 && (metricsUp?.eps || 0) >= (metricsDown?.eps || 0)))) {
+    // 3. Determine winning direction & apply momentum with Multi-Objective Tie-Breaking
+    if (this.isSuperior(scoreUp, metricsUp, this.bestScore, this.bestMetrics) && (scoreUp > scoreDown || (Math.abs(scoreUp - scoreDown) <= 0.05 && (metricsUp?.eps || 0) >= (metricsDown?.eps || 0)))) {
       this.bestScore = scoreUp;
       this.bestMetrics = metricsUp;
       bestVal = (bestVal !== currentVal) ? bestVal : testValUp;
@@ -1314,7 +1476,7 @@ class GloBusOptimizer {
 
         const nextMetrics = await this.evaluateInput(item, nextVal);
         const nextScore = this.evaluateScore(nextMetrics);
-        if (isSuperior(nextScore, nextMetrics, this.bestScore, this.bestMetrics)) {
+        if (this.isSuperior(nextScore, nextMetrics, this.bestScore, this.bestMetrics)) {
           this.bestScore = nextScore;
           this.bestMetrics = nextMetrics;
           bestVal = nextVal;
@@ -1323,7 +1485,7 @@ class GloBusOptimizer {
           break;
         }
       }
-    } else if (isSuperior(scoreDown, metricsDown, this.bestScore, this.bestMetrics)) {
+    } else if (this.isSuperior(scoreDown, metricsDown, this.bestScore, this.bestMetrics)) {
       this.bestScore = scoreDown;
       this.bestMetrics = metricsDown;
       bestVal = (bestVal !== currentVal) ? bestVal : testValDown;
@@ -1338,7 +1500,7 @@ class GloBusOptimizer {
 
         const nextMetrics = await this.evaluateInput(item, nextVal);
         const nextScore = this.evaluateScore(nextMetrics);
-        if (isSuperior(nextScore, nextMetrics, this.bestScore, this.bestMetrics)) {
+        if (this.isSuperior(nextScore, nextMetrics, this.bestScore, this.bestMetrics)) {
           this.bestScore = nextScore;
           this.bestMetrics = nextMetrics;
           bestVal = nextVal;
@@ -1352,23 +1514,50 @@ class GloBusOptimizer {
       const candidateScore = Math.max(scoreUp, scoreDown);
       const candidateMetrics = (scoreUp >= scoreDown) ? metricsUp : metricsDown;
       const candidateVal = (scoreUp >= scoreDown) ? testValUp : testValDown;
-      const deltaScore = candidateScore - this.bestScore;
-      // Controlled temperature tolerance: allow up to -0.15 delta (or -0.20 * T)
+
+      // Multi-Objective Degradation Safeguard (Audit Fix #3 & Bug #2):
+      // Delta must be measured against the true screen peak / champion benchmark, NOT just a degraded valley!
+      const peakScoreAnchor = Math.max(this.peakScore || -Infinity, this.baselineScore || -Infinity);
+      const peakEpsAnchor = Math.max(this.peakMetrics?.eps || 0, this.baselineMetrics?.eps || 0);
+
+      const deltaScoreFromCurrent = candidateScore - this.bestScore;
+      const deltaScoreFromPeak = peakScoreAnchor > -Infinity ? candidateScore - peakScoreAnchor : deltaScoreFromCurrent;
+      const deltaEpsFromPeak = peakEpsAnchor > 0 ? (candidateMetrics?.eps || 0) - peakEpsAnchor : (candidateMetrics?.eps || 0) - (this.bestMetrics?.eps || 0);
+      const deltaEpsFromCurrent = (candidateMetrics?.eps || 0) - (this.bestMetrics?.eps || 0);
+
+      // Controlled temperature tolerance: allow up to -0.15 delta (or -0.20 * T) relative to peak
       const minDeltaAllowed = Math.max(-0.15, -0.20 * this.temperature);
 
       // Valley Guard: Never drift more than 0.35 points below the recorded peak or baseline
-      const peakBenchmark = Math.max(this.peakScore || -Infinity, this.baselineScore || -Infinity);
-      const isTooFarFromPeak = peakBenchmark > -Infinity && candidateScore < peakBenchmark - 0.35;
+      const isTooFarFromPeak = peakScoreAnchor > -Infinity && candidateScore < peakScoreAnchor - 0.35;
 
-      if (!isTooFarFromPeak && candidateScore > -Infinity && deltaScore >= minDeltaAllowed && candidateVal !== currentVal) {
-        const pAccept = Math.exp(deltaScore / (0.25 * this.temperature));
-        if (Math.random() < pAccept) {
-          bestVal = candidateVal;
-          this.bestScore = candidateScore;
-          this.bestMetrics = candidateMetrics;
-          improved = true;
-          log.info('ANNEAL', `[${paramName}] Exploratory move accepted under T=${this.temperature.toFixed(2)} (ΔScore: ${deltaScore.toFixed(2)}, P=${pAccept.toFixed(3)}): ${currentVal} -> ${bestVal}`);
+      // Effective delta combines score drop and EPS drop to prevent silent downward ratcheting
+      const effectiveScoreDelta = Math.min(deltaScoreFromCurrent, deltaScoreFromPeak);
+      const effectiveEpsDelta = Math.min(deltaEpsFromCurrent, deltaEpsFromPeak);
+
+      // Calculate Boltzmann acceptance probability:
+      // A move that degrades score or EPS has P < 1.0 (penalizing both score loss and EPS loss in exponent).
+      // A move that is neutral (effectiveScoreDelta ~= 0 and effectiveEpsDelta ~= 0) is NEVER accepted with P = 1.000!
+      // It is only accepted with P = 0.50 if ROE or Cash improved, otherwise P = 0.0.
+      let pAccept = 0;
+      if (!isTooFarFromPeak && candidateScore > -Infinity && effectiveScoreDelta >= minDeltaAllowed && candidateVal !== currentVal) {
+        if (effectiveScoreDelta < -0.0001 || effectiveEpsDelta < -0.001) {
+          const combinedLoss = effectiveScoreDelta + Math.min(0, effectiveEpsDelta * 2.0);
+          pAccept = Math.min(0.95, Math.exp(combinedLoss / (0.25 * this.temperature)));
+        } else if (Math.abs(effectiveScoreDelta) <= 0.0001 && Math.abs(effectiveEpsDelta) <= 0.001) {
+          const roeImproved = (candidateMetrics?.roe || 0) > (this.bestMetrics?.roe || 0) + 0.05;
+          const cashImproved = (candidateMetrics?.endingCash || 0) > (this.bestMetrics?.endingCash || 0) + 100;
+          pAccept = (roeImproved || cashImproved) ? 0.50 : 0.0;
         }
+      }
+
+      if (pAccept > 0 && Math.random() < pAccept) {
+        bestVal = candidateVal;
+        this.bestScore = candidateScore;
+        this.bestMetrics = candidateMetrics;
+        improved = true;
+        acceptedViaAnneal = true;
+        log.info('ANNEAL', `[${paramName}] Exploratory move accepted under T=${this.temperature.toFixed(2)} (ΔScore: ${effectiveScoreDelta.toFixed(2)}, P=${pAccept.toFixed(3)}): ${currentVal} -> ${bestVal}`);
       }
     }
 
@@ -1388,14 +1577,13 @@ class GloBusOptimizer {
     const currentScore = this.evaluateScore(currentMetrics);
 
     if (improved) {
-      const isAnnealMove = (currentScore < (this.peakScore || -Infinity) - 0.05);
       this.bestScore = currentScore;
       this.bestMetrics = currentMetrics;
 
-      const newPeakFound = this.updatePeak(currentScore, currentMetrics, this.adapter.captureSnapshot(allInputsList));
+      const newPeakFound = !acceptedViaAnneal && this.updatePeak(currentScore, currentMetrics, this.adapter.captureSnapshot(allInputsList));
       this.bestCombo = this.peakCombo || this.adapter.captureSnapshot(allInputsList);
 
-      if (isAnnealMove && !newPeakFound) {
+      if (acceptedViaAnneal) {
         log.info('ANNEAL', `[${paramName}] Operating point shifted to exploratory ridge (Score: ${currentScore.toFixed(1)} vs Peak: ${(this.peakScore || currentScore).toFixed(1)}). Peak combo safely preserved.`);
       } else {
         const epsDiff = (this.bestMetrics.eps - (this.baselineMetrics?.eps || 0)).toFixed(2);

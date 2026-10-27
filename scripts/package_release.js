@@ -62,7 +62,7 @@ const releaseNotes = `# Glo-Bus Optimizer v${version} Release Notes
 - **Master Round Solvency & Performance Gate**: Guarantees zero regression against locked Round Baseline, aborting auto-save if final EPS drops.
 - **Peak-State Decision Restoration**: Restores intermediate peaks achieved during exploratory passes with multi-objective tie-breaking.
 - **Site Notification Interception & Auto-Rollback**: Intercepts Glo-Bus toastr and native alerts, instantly reverting rejected inputs to safe baselines.
-- **28-Test Architectural & Mathematical Verification Suite**: Automated verification pipeline ensuring 100% test pass rate across all mathematical and operational guardrails.
+- **36-Test Architectural & Mathematical Verification Suite**: Automated verification pipeline ensuring 100% test pass rate across all mathematical and operational guardrails.
 - **Universal Cross-Browser Distribution**:
   - \`${zipName}\`: Ready for Chrome, Edge, Brave, and Firefox unpacked/temporary add-on installation.
   - \`globus-pilot.user.js\`: Standalone userscript for Violentmonkey / Tampermonkey.

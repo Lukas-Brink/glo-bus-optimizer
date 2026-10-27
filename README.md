@@ -12,6 +12,10 @@
 > [!NOTE]
 > **What is this?** This project is an intelligent decision optimization suite built specifically for students and participants in McGraw-Hill's **GLO-BUS** international business strategy simulation (*Action Cameras & UAV Drones*). It is not affiliated with the Globus research data management service.
 
+> [!WARNING]
+> **Performance Disclaimer**: Real-world optimization performance is kinda iffy. Execution speed and optimization outcomes can vary significantly depending on Glo-Bus server calculation latency, browser responsiveness, connection speed, and your league's specific competitive dynamics. While the engine includes multi-cycle convergence safeguards and solvency guardrails, browser-based heuristic algorithms can encounter timing delays or settle into different local optima. Always review all projected metrics and financial impacts before saving decisions.
+
+
 ---
 
 ## Overview
@@ -134,7 +138,7 @@ glo-bus-optimizer/
 │   ├── strategies.py           # Pre-configured Grand Champion decision templates
 │   └── run_cli.py              # Command-line simulation runner & programmatic solver
 ├── tests/                      # Comprehensive Unit & Integration Test Suites
-│   ├── test_audit_fixes.js     # 28 architectural & mathematical verification tests
+│   ├── test_audit_fixes.js     # 36 architectural & mathematical verification tests
 │   ├── test_extension.js       # Node.js tests for DOM adapter, coordinator, & HUD
 │   └── test_simulator.py       # Python unit tests for model, elasticity, & solver
 ├── scripts/                    # Build, Audit & Packaging Utilities
@@ -206,6 +210,13 @@ $$\text{Composite Score} = 0.50 \cdot \text{Score}_{\text{IE}} + 0.50 \cdot \tex
 3. **Coupled Diagonal Exploration**: Variables with high cross-elasticities (e.g., Regional Price vs. Advertising, Base Wage vs. Assembly Incentive, Stock Buyback vs. Dividends) are co-optimized across 2D diagonal permutations.
 4. **Adaptive Line Search and Momentum**: Continuous inputs explore directional gradients with step scaling and momentum acceleration, committing parameter updates only when composite score strictly improves.
 
+### 3. Multi-Cycle Annealing Cooling Schedule & Peak Safeguards
+1. **Multi-Cycle Annealing Schedule**: Full-round coordination runs up to 3 iterative cycles across all seven decision screens. Cycle 1 operates with coarse exploratory step scaling (2.0x) and simulated annealing temperature (T = 1.00) to jump over suboptimal local pockets. Cycle 2 transitions to pure greedy coordinate descent (T = 0.00) at 1.0x step scale. Cycle 3 executes fine-grained polish at 0.5x step scale.
+2. **True-Peak Anchored Metropolis Safeguard**: During exploratory passes, candidate degradation is evaluated relative to the global peak score and baseline anchors, rather than degraded local valleys. Zero-delta moves on flat metric plateaus are rejected unless ROE or Cash explicitly improves, eliminating random-walk downward ratcheting.
+3. **Intermediate Peak Combo Restoration**: If an exploratory annealing pass drifts into a lower-scoring valley, the highest-scoring intermediate peak parameter combination is automatically restored to physical DOM elements and in-memory caches before launching greedy descent.
+4. **Operational Image Rating Slack Buffer**: On operational screens (1-4), when Image Rating meets or exceeds Investor Expectations (>= 75), the full expectation bonus is awarded so coordinate descent does not discard EPS-positive moves due to integer score rounding jitter. Screen 6 (CSR) re-anchors authentic full scoring.
+5. **Unbounded Surplus Regularizer**: Smooth positive gradients across EPS, Cash, ROE, and stock price ensure non-zero gradient descent even when simulated metrics surpass standard investor expectation caps.
+
 ---
 
 ## Strategy Playbook
@@ -229,6 +240,14 @@ Special thanks to the original authors for exploring algorithmic optimization in
 
 ---
 
-## Disclaimer
+## Disclaimer & Performance Notice
 
+### Academic & Educational Use
 This software is an independent open-source educational utility developed for learning economic modeling, mathematical optimization, and algorithmic business simulation. It is not affiliated with, endorsed by, or sponsored by McGraw-Hill Education or the creators of GLO-BUS. Use responsibly in accordance with your academic institution's guidelines.
+
+### Performance Disclaimer
+Performance is kinda iffy. Optimization speed, convergence consistency, and real-world results can vary significantly across different environments and game rounds due to several factors:
+- **Server and Network Latency**: In-browser coordinate descent triggers live pro-forma calculation requests to Glo-Bus servers. When McGraw-Hill servers experience heavy traffic (e.g., right before round deadlines), calculation responses can lag or drop frames, causing temporary delays or missed metric reads.
+- **Dynamic Competitor Behavior**: GLO-BUS is an interactive oligopoly. Decisions that appear mathematically optimal against last round's benchmarks assume competitors maintain static strategies. If competing companies drastically reduce prices, flood advertising, or expand factory capacity, your actual end-of-round EPS and market share will differ from pro-forma projections.
+- **Local Optima & Search Sensitivity**: Coordinate descent and simulated annealing rely on heuristic directional exploration. Starting from different baselines can lead to different local plateaus.
+- **Review Before Submitting**: Never rely on automated tools without manual verification. Always inspect projected Ending Cash (defending a >= $2,500k buffer), Credit Rating (>= A-), and production capacity balance before committing decisions to the server.

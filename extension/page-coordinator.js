@@ -741,11 +741,21 @@
       const hasSignificantGain = convergenceResult
         ? convergenceResult.hasSignificantGain
         : ((cycleGain >= minGainThreshold) || (scoreGain >= 0.50));
-      const canContinue = ((workflow.cycleIndex || 1) < maxCycles) && hasSignificantGain;
+
+      // Multi-Cycle Convergence Protection (Audit Fix #6):
+      // Cycle 1 is coarse (2x step scale) and exploratory (T=1.00). Coarse steps can overshoot
+      // fine local optima around strong baselines, yielding +$0.00 gain in Cycle 1.
+      // NEVER allow early convergence termination after Cycle 1 if maxCycles > 1!
+      // If Cycle 1 yields +$0.00, the optimizer MUST advance to Cycle 2 (1x scale, lower T)
+      // and Cycle 3 (0.5x scale, T=0 pure greedy descent) before declaring convergence.
+      const isCoarseOrExploratoryCycle = (workflow.cycleIndex || 1) === 1;
+      const canContinue = ((workflow.cycleIndex || 1) < maxCycles) && (hasSignificantGain || isCoarseOrExploratoryCycle);
 
       if (canContinue) {
         const nextCycle = (workflow.cycleIndex || 1) + 1;
-        const progressDetail = convergenceResult?.reason || `EPS +$${cycleGain.toFixed(2)} | Score +${scoreGain.toFixed(2)} pts`;
+        const progressDetail = hasSignificantGain
+          ? (convergenceResult?.reason || `EPS +$${cycleGain.toFixed(2)} | Score +${scoreGain.toFixed(2)} pts`)
+          : 'Coarse/Exploratory cycle complete; transitioning to fine-grained coordinate descent (1x step scale)';
         log.step('CONVERGE', `Cycle ${workflow.cycleIndex} complete: ${progressDetail}. Looping back to [Product Design] for Cycle ${nextCycle} of ${maxCycles} (Deep Convergence)...`);
 
         const allLinks = this.discoverDecisionLinks();

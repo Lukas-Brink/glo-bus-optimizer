@@ -59,3 +59,13 @@ You have **four convenient ways** to run Glo-Bus Optimizer:
 3. Click **"Load unpacked"**.
 4. Select the `extension/` directory from this repository.
 5. Done! The optimizer icon will appear in your browser toolbar, and the HUD will dock into any active Glo-Bus decision screen.
+
+---
+
+## Performance & Reliability Notes
+
+- **Performance Disclaimer**: In-browser optimization performance can be kinda iffy depending on local machine speed, browser load, and Glo-Bus server responsiveness. Because each parameter step triggers asynchronous pro-forma recalculations on Glo-Bus servers, high server traffic periods (such as immediately before round submission deadlines) may cause noticeable latency or slower step evaluations.
+- **Background Interaction**: While the optimizer is running, avoid clicking inside decision input fields or opening other tabs in the same window to prevent interrupting active DOM events and calculation synchronization.
+- **HUD Revert**: If network latency causes pro-forma projections to return inconsistent values or dropped frames, you can click "REVERT" on the HUD at any time to return the current screen to its initial baseline.
+- **Save Modal Permissions**: If running Full Round optimization, make sure browser dialogs and popups are not suppressed for `glo-bus.com` so the final save modal confirmation can complete.
+

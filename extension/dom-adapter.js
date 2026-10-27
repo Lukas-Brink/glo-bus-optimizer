@@ -1982,7 +1982,7 @@ class GloBusDOMAdapter {
     return this.initialSnapshot;
   }
 
-  async restoreSnapshot(snapshot) {
+  async restoreSnapshot(snapshot, cachedInputsList = null) {
     const target = snapshot || this.initialSnapshot;
     if (!target) return;
     const inputs = this.getDecisionInputs();
@@ -1997,12 +1997,41 @@ class GloBusDOMAdapter {
           }
           if (idx !== undefined && !isNaN(idx)) {
             this.setInputValue(item, idx);
+            item.selectedIndex = idx;
+            item.value = saved.value;
           }
         } else {
           this.setInputValue(item, saved.value);
+          item.value = saved.value;
         }
       }
     }
+
+    // Re-synchronize cached/caller input objects if provided
+    if (Array.isArray(cachedInputsList)) {
+      for (const item of cachedInputsList) {
+        const saved = target[item.key] || target[item.id] || target[item.name];
+        if (saved !== undefined) {
+          if (item.type === 'select') {
+            let idx = saved.selectedIndex;
+            if (idx === undefined && saved.value !== undefined) {
+              const optIdx = item.options ? item.options.findIndex(o => String(o.value) === String(saved.value)) : -1;
+              idx = optIdx !== -1 ? optIdx : parseInt(saved.value, 10);
+            }
+            if (idx !== undefined && !isNaN(idx)) {
+              item.selectedIndex = idx;
+              item.value = saved.value;
+              if (item.element) item.element.selectedIndex = idx;
+            }
+          } else {
+            const numVal = typeof saved.value === 'number' ? saved.value : parseFloat(String(saved.value).replace(/,/g, ''));
+            item.value = Number.isFinite(numVal) ? numVal : saved.value;
+            if (item.element) item.element.value = saved.value;
+          }
+        }
+      }
+    }
+
     await this.triggerCalculate();
   }
 }
